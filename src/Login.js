@@ -1,11 +1,18 @@
 import React, { useState } from "react";
 
-function Login({ onLogin, onDemoLogin, onCreateProfile }) {
+const API_URL = process.env.REACT_APP_API_URL || "http://localhost:5000";
+
+function Login({ onLogin, onCreateProfile }) {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [errors, setErrors] = useState({});
   const [isLoggingIn, setIsLoggingIn] = useState(false);
+  const [forgotMode, setForgotMode] = useState(false);
+  const [resetPassword, setResetPassword] = useState("");
+  const [resetConfirmPassword, setResetConfirmPassword] = useState("");
+  const [message, setMessage] = useState("");
+  const resetToken = new URLSearchParams(window.location.search).get("resetToken");
 
   // ================= VALIDATION =================
   const validateForm = () => {
@@ -21,6 +28,8 @@ function Login({ onLogin, onDemoLogin, onCreateProfile }) {
 
     if (!password) {
       newErrors.password = "Password is required.";
+    } else if (password.length < 8) {
+      newErrors.password = "Password should be at least 8 characters.";
     }
 
     setErrors(newErrors);
@@ -36,13 +45,8 @@ function Login({ onLogin, onDemoLogin, onCreateProfile }) {
 
     setIsLoggingIn(true);
 
-    setTimeout(() => {
-      setIsLoggingIn(false);
-
-      if (onLogin) {
-        onLogin(email.trim().toLowerCase(), password);
-      }
-    }, 600);
+    Promise.resolve(onLogin?.(email.trim().toLowerCase(), password))
+      .finally(() => setIsLoggingIn(false));
   };
 
   // ================= INPUT =================
@@ -64,10 +68,43 @@ function Login({ onLogin, onDemoLogin, onCreateProfile }) {
     }));
   };
 
-  // ================= DEMO LOGIN =================
-  const handleDemo = () => {
-    if (onDemoLogin) {
-      onDemoLogin();
+  const requestPasswordReset = async (e) => {
+    e.preventDefault();
+    if (!email.trim()) {
+      setMessage("Enter your email address first.");
+      return;
+    }
+    try {
+      const response = await fetch(`${API_URL}/api/auth/forgot-password`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: email.trim().toLowerCase() }),
+      });
+      const data = await response.json();
+      setMessage(data.message || "Check your email for reset instructions.");
+    } catch (error) {
+      setMessage("Could not send reset email. Please try again.");
+    }
+  };
+
+  const submitPasswordReset = async (e) => {
+    e.preventDefault();
+    if (resetPassword !== resetConfirmPassword) {
+      setMessage("Passwords do not match.");
+      return;
+    }
+    try {
+      const response = await fetch(`${API_URL}/api/auth/reset-password`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ token: resetToken, password: resetPassword }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.message);
+      setMessage(data.message);
+      window.history.replaceState({}, document.title, window.location.pathname);
+    } catch (error) {
+      setMessage(error.message || "Could not reset password.");
     }
   };
 
@@ -124,7 +161,50 @@ function Login({ onLogin, onDemoLogin, onCreateProfile }) {
             </p>
           </div>
 
-          {/* ================= FORM ================= */}
+          {resetToken ? (
+            <form onSubmit={submitPasswordReset}>
+              <h3 className="text-xl font-bold mb-5">Reset Password</h3>
+              <input
+                type="password"
+                value={resetPassword}
+                onChange={(e) => setResetPassword(e.target.value)}
+                placeholder="New password"
+                className="w-full mb-4 px-4 py-3 rounded-xl bg-gray-950/70 border border-gray-700 text-white outline-none focus:border-green-500"
+                required
+              />
+              <input
+                type="password"
+                value={resetConfirmPassword}
+                onChange={(e) => setResetConfirmPassword(e.target.value)}
+                placeholder="Confirm new password"
+                className="w-full mb-4 px-4 py-3 rounded-xl bg-gray-950/70 border border-gray-700 text-white outline-none focus:border-green-500"
+                required
+              />
+              <button type="submit" className="w-full py-3.5 rounded-xl bg-green-600 hover:bg-green-500 font-bold">
+                Reset Password
+              </button>
+            </form>
+          ) : forgotMode ? (
+            <form onSubmit={requestPasswordReset}>
+              <h3 className="text-xl font-bold mb-2">Forgot Password?</h3>
+              <p className="text-gray-500 text-sm mb-5">Enter your email and we will send a reset link.</p>
+              <input
+                type="email"
+                value={email}
+                onChange={handleEmailChange}
+                placeholder="example@gmail.com"
+                className="w-full mb-4 px-4 py-3 rounded-xl bg-gray-950/70 border border-gray-700 text-white outline-none focus:border-green-500"
+                required
+              />
+              <button type="submit" className="w-full py-3.5 rounded-xl bg-green-600 hover:bg-green-500 font-bold">
+                Send Reset Link
+              </button>
+              <button type="button" onClick={() => { setForgotMode(false); setMessage(""); }} className="w-full mt-3 text-green-400 font-semibold">
+                Back to Login
+              </button>
+            </form>
+          ) : (
+          /* ================= FORM ================= */
           <form onSubmit={handleSubmit}>
 
             {/* EMAIL */}
@@ -220,31 +300,15 @@ function Login({ onLogin, onDemoLogin, onCreateProfile }) {
                 "Login to FarmerDetect →"
               )}
             </button>
+            <button type="button" onClick={() => { setForgotMode(true); setMessage(""); }} className="w-full mt-4 text-sm text-green-400 hover:text-green-300">
+              Forgot Password?
+            </button>
           </form>
+          )}
 
-          {/* ================= DIVIDER ================= */}
-          <div className="flex items-center gap-3 my-6">
-            <div className="h-px flex-1 bg-gray-800" />
-            <span className="text-gray-600 text-xs">
-              OR
-            </span>
-            <div className="h-px flex-1 bg-gray-800" />
-          </div>
+          {message && <p className="mt-4 text-center text-sm text-green-300">{message}</p>}
 
-          {/* ================= DEMO ACCOUNT ================= */}
-          <button
-            type="button"
-            onClick={handleDemo}
-            className="w-full py-3.5 rounded-xl bg-gray-800/80 border border-gray-700 hover:border-green-700 hover:bg-green-950/20 text-gray-300 hover:text-green-400 font-semibold transition-all duration-300 hover:-translate-y-0.5"
-          >
-            🚜 Continue with Demo Account
-          </button>
-
-          <p className="text-center text-gray-600 text-xs mt-3">
-            Try FarmerDetect without creating an account
-          </p>
-
-          {/* ================= CREATE PROFILE ================= */}
+          {/* ================= SIGN UP ================= */}
           <div className="mt-7 pt-6 border-t border-gray-800 text-center">
             <p className="text-gray-500 text-sm">
               Don't have an account?
@@ -253,9 +317,9 @@ function Login({ onLogin, onDemoLogin, onCreateProfile }) {
             <button
               type="button"
               onClick={onCreateProfile}
-              className="mt-2 text-green-400 hover:text-green-300 font-bold transition-colors"
+              className="mt-3 w-full py-3.5 rounded-xl bg-gray-800/80 border border-gray-700 hover:border-green-700 hover:bg-green-950/20 text-green-400 hover:text-green-300 font-bold transition-all duration-300 hover:-translate-y-0.5"
             >
-              Create Farmer Profile →
+              SignUp
             </button>
           </div>
         </div>

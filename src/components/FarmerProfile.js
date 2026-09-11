@@ -1,5 +1,7 @@
 import React, { useEffect, useState } from "react";
 
+const API_URL = process.env.REACT_APP_API_URL || "http://localhost:5000";
+
 function FarmerProfile({
   onBack,
   onProfileCreated,
@@ -23,7 +25,14 @@ function FarmerProfile({
   });
 
   const [profileImage, setProfileImage] = useState("");
+  const [selectedImageFile, setSelectedImageFile] = useState(null);
   const [errors, setErrors] = useState({});
+  const [otp, setOtp] = useState("");
+  const [emailVerified, setEmailVerified] = useState(false);
+  const [otpLoading, setOtpLoading] = useState(false);
+  const [otpMessage, setOtpMessage] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
+  const [imageUploading, setImageUploading] = useState(false);
 
   // ================= LOCATION OPTIONS =================
 
@@ -112,31 +121,26 @@ function FarmerProfile({
   // ================= LOAD PROFILE =================
 
   useEffect(() => {
-    const savedProfile = localStorage.getItem("farmerProfile");
-
-    if (savedProfile) {
-      try {
-        const data = JSON.parse(savedProfile);
-
-        setProfile(data);
-
+    fetch(`${API_URL}/api/auth/me`, { credentials: "include" })
+      .then((response) => (response.ok ? response.json() : null))
+      .then((data) => {
+        if (!data?.user) return;
+        const user = data.user;
+        setProfile(user);
         setFormData({
-          name: data.name || "",
-          email: data.email || "",
+          name: user.name || "",
+          email: user.email || "",
           password: "",
-          phone: data.phone || "",
-          location: data.location || "",
-          farmSize: data.farmSize || "",
-          crop: data.crop || "",
-          category: data.category || "",
-          season: data.season || "",
+          phone: user.phone || "",
+          location: user.location || "",
+          farmSize: user.farmSize || "",
+          crop: user.crop || "",
+          category: user.category || "",
+          season: user.season || "",
         });
-
-        setProfileImage(data.profileImage || "");
-      } catch (error) {
-        console.error("Profile data error:", error);
-      }
-    }
+        setProfileImage(user.profileImage || "");
+      })
+      .catch((error) => console.error("Profile loading error:", error));
   }, []);
 
   // ================= HANDLE INPUT =================
@@ -155,7 +159,62 @@ function FarmerProfile({
       [name]: "",
     }));
 
+    if (name === "email" && isCreating) {
+      setEmailVerified(false);
+      setOtp("");
+      setOtpMessage("");
+    }
+
     setSaved(false);
+  };
+
+  const showOtpToast = (message) => {
+    setOtpMessage(message);
+    window.setTimeout(() => setOtpMessage(""), 3000);
+  };
+
+  const sendOtp = async () => {
+    const email = formData.email.trim().toLowerCase();
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(email)) {
+      setErrors((prev) => ({ ...prev, email: "Enter a valid email address." }));
+      showOtpToast("email not valid");
+      return;
+    }
+
+    setOtpLoading(true);
+    try {
+      const response = await fetch(`${API_URL}/api/auth/send-otp`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.message || "Could not send OTP.");
+      setOtpMessage(data.message);
+    } catch (error) {
+      showOtpToast(error.message === "Enter a valid email address." ? "email not valid" : error.message);
+    } finally {
+      setOtpLoading(false);
+    }
+  };
+
+  const verifyOtp = async () => {
+    try {
+      const response = await fetch(`${API_URL}/api/auth/verify-otp`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: formData.email.trim().toLowerCase(), otp }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.message || "email not valid");
+      setEmailVerified(true);
+      setOtpMessage(data.message);
+    } catch (error) {
+      setEmailVerified(false);
+      setFormData((prev) => ({ ...prev, email: "" }));
+      setOtp("");
+      showOtpToast("email not valid");
+    }
   };
 
   // ================= IMAGE =================
@@ -181,18 +240,12 @@ function FarmerProfile({
       return;
     }
 
-    const reader = new FileReader();
-
-    reader.onloadend = () => {
-      setProfileImage(reader.result);
-
-      setErrors((prev) => ({
-        ...prev,
-        profileImage: "",
-      }));
-    };
-
-    reader.readAsDataURL(file);
+    setSelectedImageFile(file);
+    setProfileImage(URL.createObjectURL(file));
+    setErrors((prev) => ({
+      ...prev,
+      profileImage: "",
+    }));
   };
 
   // ================= VALIDATION =================
@@ -220,6 +273,10 @@ function FarmerProfile({
       newErrors.email = "Enter a valid email address.";
     }
 
+    if (isCreating && !emailVerified) {
+      newErrors.email = "Please verify your email first.";
+    }
+
     // Password
     if (isCreating) {
       const passwordRegex =
@@ -229,7 +286,7 @@ function FarmerProfile({
         newErrors.password = "Password is required.";
       } else if (!passwordRegex.test(formData.password)) {
         newErrors.password =
-          "Password must be 8+ characters with uppercase, lowercase and number.";
+          "Password should be at least 8 characters with uppercase, lowercase and number.";
       }
     }
 
@@ -284,8 +341,30 @@ function FarmerProfile({
 
   // ================= SAVE PROFILE =================
 
-  const handleSave = () => {
+  const uploadSelectedImage = async () => {
+    setImageUploading(true);
+    const imageData = new FormData();
+    imageData.append("image", selectedImageFile);
+    try {
+      const imageResponse = await fetch(`${API_URL}/api/auth/profile/image`, {
+        method: "POST",
+        credentials: "include",
+        body: imageData,
+      });
+      const imageResult = await imageResponse.json();
+      if (!imageResponse.ok || !imageResult.imageUrl) {
+        throw new Error(imageResult.message || "Could not upload profile image.");
+      }
+      return imageResult.imageUrl;
+    } finally {
+      setImageUploading(false);
+    }
+  };
+
+  const handleSave = async () => {
     setSaved(false);
+
+    if (imageUploading) return;
 
     const isValid = validateForm();
 
@@ -293,89 +372,84 @@ function FarmerProfile({
       return;
     }
 
-    const existingProfile = JSON.parse(
-      localStorage.getItem("farmerProfile") || "null"
-    );
-
-    // Check duplicate email during new profile creation
-    if (
-      isCreating &&
-      existingProfile &&
-      existingProfile.email?.toLowerCase() ===
-        formData.email.trim().toLowerCase()
-    ) {
-      setErrors({
-        email:
-          "This email is already registered. Please use another email.",
-      });
-
-      return;
+    let uploadedImageUrl = profileImage;
+    if (!isCreating && selectedImageFile) {
+      try {
+        uploadedImageUrl = await uploadSelectedImage();
+      } catch (error) {
+        setErrors({ profileImage: error.message });
+        return;
+      }
     }
 
-    // ================= IMPORTANT =================
-    // Editing profile should NOT remove old password.
-
-    const updatedProfile = {
-      ...(existingProfile || {}),
-
+    const payload = {
       name: formData.name.trim(),
-
       email: formData.email.trim().toLowerCase(),
-
-      // New profile -> new password
-      // Edit profile -> old password
-      password: isCreating
-        ? formData.password
-        : existingProfile?.password,
-
       phone: formData.phone.trim(),
-
       location: formData.location,
-
-      farmSize: formData.farmSize,
-
+      farmSize: Number(formData.farmSize),
       crop: formData.crop,
-
       category: formData.category,
-
       season: formData.season,
-
-      profileImage: profileImage,
+      profileImage: uploadedImageUrl,
     };
 
-    // Save in localStorage
-    localStorage.setItem(
-      "farmerProfile",
-      JSON.stringify(updatedProfile)
-    );
+    if (isCreating) {
+      payload.password = formData.password;
+    }
 
-    // Password ko UI state mein hide rakho
-    const profileForState = {
-      ...updatedProfile,
-      password: undefined,
-    };
+    try {
+      const response = await fetch(
+        `${API_URL}/api/auth/${isCreating ? "register" : "profile"}`,
+        {
+          method: isCreating ? "POST" : "PUT",
+          headers: { "Content-Type": "application/json" },
+          credentials: "include",
+          body: JSON.stringify(payload),
+        }
+      );
+      const data = await response.json();
+      if (!response.ok) {
+        setErrors({ form: data.message || "Could not save profile." });
+        return;
+      }
 
-    setProfile(profileForState);
+      let profileForState = data.user;
 
-    setFormData({
-      name: updatedProfile.name,
-      email: updatedProfile.email,
-      password: "",
-      phone: updatedProfile.phone,
-      location: updatedProfile.location,
-      farmSize: updatedProfile.farmSize,
-      crop: updatedProfile.crop,
-      category: updatedProfile.category,
-      season: updatedProfile.season,
-    });
+      if (isCreating && selectedImageFile) {
+        try {
+          const imageUrl = await uploadSelectedImage();
+          const refreshedProfile = await fetch(`${API_URL}/api/auth/me`, { credentials: "include" });
+          const refreshedData = await refreshedProfile.json();
+          if (refreshedProfile.ok && refreshedData.user.profileImage === imageUrl) profileForState = refreshedData.user;
+        } catch (error) {
+          setErrors({ profileImage: error.message });
+          return;
+        }
+      }
 
-    setIsCreating(false);
-    setIsEditing(false);
-    setSaved(true);
+      setProfile(profileForState);
+      setSelectedImageFile(null);
 
-    // App ko inform karo
-    if (onProfileCreated) {
-      onProfileCreated(profileForState);
+      setFormData({
+        name: profileForState.name,
+        email: profileForState.email,
+        password: "",
+        phone: profileForState.phone,
+        location: profileForState.location,
+        farmSize: profileForState.farmSize,
+        crop: profileForState.crop,
+        category: profileForState.category,
+        season: profileForState.season,
+      });
+
+      setIsCreating(false);
+      setIsEditing(false);
+      setSaved(true);
+
+      if (onProfileCreated) onProfileCreated(profileForState);
+    } catch (error) {
+      setErrors({ form: "Backend se connection nahi ho paya." });
     }
   };
 
@@ -384,6 +458,10 @@ function FarmerProfile({
   const startCreating = () => {
     setIsCreating(true);
     setIsEditing(false);
+    setEmailVerified(false);
+    setOtp("");
+    setOtpMessage("");
+    setShowPassword(false);
 
     setFormData({
       name: "",
@@ -398,6 +476,7 @@ function FarmerProfile({
     });
 
     setProfileImage("");
+    setSelectedImageFile(null);
     setErrors({});
     setSaved(false);
   };
@@ -420,9 +499,14 @@ function FarmerProfile({
     });
 
     setProfileImage(profile.profileImage || "");
+    setSelectedImageFile(null);
 
     setIsCreating(false);
     setIsEditing(true);
+    setEmailVerified(true);
+    setOtp("");
+    setOtpMessage("");
+    setShowPassword(false);
     setErrors({});
     setSaved(false);
   };
@@ -433,6 +517,7 @@ function FarmerProfile({
     if (profile) {
       setIsCreating(false);
       setIsEditing(false);
+      setOtpMessage("");
       setErrors({});
       setSaved(false);
     } else {
@@ -450,6 +535,12 @@ function FarmerProfile({
 
     return (
       <div className="min-h-screen bg-gray-950 text-white px-4 py-8">
+
+        {otpMessage && (
+          <div className="fixed top-5 left-1/2 -translate-x-1/2 z-50 rounded-xl bg-gray-900 border border-green-700 px-5 py-3 text-sm text-green-300 shadow-xl">
+            {otpMessage}
+          </div>
+        )}
         <div className="max-w-3xl mx-auto">
 
           {/* Header */}
@@ -496,7 +587,7 @@ function FarmerProfile({
               )}
 
               <label className="mt-4 cursor-pointer px-4 py-2 rounded-lg bg-green-600 hover:bg-green-700">
-                Upload Photo
+                {imageUploading ? "Uploading Photo..." : "Upload Photo"}
 
                 <input
                   type="file"
@@ -534,8 +625,42 @@ function FarmerProfile({
               value={formData.email}
               onChange={handleChange}
               placeholder="example@gmail.com"
+              disabled={!isCreating}
               error={errors.email}
             />
+
+            {isCreating && (
+              <>
+                <button
+                  type="button"
+                  onClick={sendOtp}
+                  disabled={otpLoading || emailVerified}
+                  className="w-full mt-2 py-2.5 rounded-lg bg-green-700 hover:bg-green-600 disabled:opacity-60 font-semibold"
+                >
+                  {emailVerified ? "Email Verified" : otpLoading ? "Sending OTP..." : "Send OTP"}
+                </button>
+
+                <div className="mt-3 flex gap-2">
+                  <input
+                    type="text"
+                    inputMode="numeric"
+                    maxLength="6"
+                    value={otp}
+                    onChange={(e) => setOtp(e.target.value.replace(/\D/g, "").slice(0, 6))}
+                    placeholder="Enter OTP"
+                    className="flex-1 rounded-lg bg-gray-900 border border-gray-700 px-3 py-2.5 text-white outline-none focus:border-green-500"
+                  />
+                  <button
+                    type="button"
+                    onClick={verifyOtp}
+                    disabled={otp.length !== 6 || emailVerified}
+                    className="px-4 rounded-lg bg-gray-700 hover:bg-gray-600 disabled:opacity-50 font-semibold"
+                  >
+                    Verify OTP
+                  </button>
+                </div>
+              </>
+            )}
 
             {/* Password only during create */}
 
@@ -543,11 +668,13 @@ function FarmerProfile({
               <Input
                 label="Password"
                 name="password"
-                type="password"
+                type={showPassword ? "text" : "password"}
                 value={formData.password}
                 onChange={handleChange}
                 placeholder="Create a strong password"
                 error={errors.password}
+                showPassword={showPassword}
+                onTogglePassword={() => setShowPassword((current) => !current)}
               />
             )}
 
@@ -574,6 +701,8 @@ function FarmerProfile({
                 }));
               }}
               placeholder="9876543210"
+              maxLength="10"
+              disabled={!isCreating}
               error={errors.phone}
             />
 
@@ -876,6 +1005,9 @@ function Input({
   min,
   max,
   step,
+  disabled = false,
+  showPassword,
+  onTogglePassword,
 }) {
   return (
     <div className="mb-5">
@@ -884,21 +1016,35 @@ function Input({
         {label}
       </label>
 
-      <input
-        type={type}
-        name={name}
-        value={value}
-        onChange={onChange}
-        placeholder={placeholder}
-        min={min}
-        max={max}
-        step={step}
-        className={`w-full px-4 py-3 rounded-xl bg-gray-800 border ${
-          error
-            ? "border-red-500"
-            : "border-gray-700"
-        } text-white outline-none focus:border-green-500`}
-      />
+      <div className="relative">
+        <input
+          type={type}
+          name={name}
+          value={value}
+          onChange={onChange}
+          placeholder={placeholder}
+          min={min}
+          max={max}
+          step={step}
+          disabled={disabled}
+          className={`w-full px-4 ${onTogglePassword ? "pr-12" : "pr-4"} py-3 rounded-xl bg-gray-800 border ${
+            error
+              ? "border-red-500"
+              : "border-gray-700"
+          } text-white outline-none focus:border-green-500 disabled:cursor-not-allowed disabled:opacity-60`}
+        />
+
+        {onTogglePassword && (
+          <button
+            type="button"
+            onClick={onTogglePassword}
+            className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-green-400"
+            aria-label={showPassword ? "Hide password" : "Show password"}
+          >
+            {showPassword ? "🙈" : "👁️"}
+          </button>
+        )}
+      </div>
 
       {error && (
         <p className="text-red-400 text-sm mt-1">

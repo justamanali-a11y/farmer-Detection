@@ -1,44 +1,77 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
+
+const API_URL = process.env.REACT_APP_API_URL || "http://localhost:5000";
 
 function DetectDisease({ onBack }) {
   const [image, setImage] = useState(null);
+  const [selectedFile, setSelectedFile] = useState(null);
   const [imageName, setImageName] = useState("");
   const [result, setResult] = useState(null);
+  const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+
+  // release the memory , use by image
+  useEffect(() => {
+    return () => {
+      if (image) URL.revokeObjectURL(image);
+    };
+  }, [image]);
 
   const handleImage = (e) => {
     const file = e.target.files[0];
 
     if (file) {
+      if (image) URL.revokeObjectURL(image);
+
+      setSelectedFile(file);
       setImage(URL.createObjectURL(file));
       setImageName(file.name);
       setResult(null);
+      setError("");
     }
   };
 
-  const detectCrop = () => {
-    if (!image) return;
+  const detectCrop = async () => {
+    if (!selectedFile) return;
 
     setLoading(true);
+    setError("");
 
-    setTimeout(() => {
+    try {
+      const response = await fetch(`${API_URL}/api/health`);
+
+      if (!response.ok) {
+        throw new Error(`Backend returned ${response.status}`);
+      }
+
+      const data = await response.json();
+
       setResult({
-        crop: "Tomato",
-        disease: "Early Blight",
-        confidence: "94%",
-        severity: "Moderate",
-        recommendation:
-          "Remove infected leaves, improve air circulation and avoid overhead watering. Use suitable fungicide if required.",
+        crop: data.crop,
+        disease: data.disease,
+        confidence: data.confidence,
+        severity: data.severity,
+        recommendation: data.recommendation,
       });
-
+      
+    } catch (error) {
+      console.error("Backend connection error:", error);
+      setError(
+        "Backend se connection nahi ho paya. Backend server check karke dobara try karein."
+      );
+    } finally {
       setLoading(false);
-    }, 1500);
+    }
   };
 
   const removeImage = () => {
+    if (image) URL.revokeObjectURL(image);
+
     setImage(null);
+    setSelectedFile(null);
     setImageName("");
     setResult(null);
+    setError("");
   };
 
   return (
@@ -120,6 +153,12 @@ function DetectDisease({ onBack }) {
                 </button>
               </div>
             </div>
+          )}
+
+          {error && (
+            <p role="alert" className="mt-5 rounded-lg bg-red-50 border border-red-200 p-4 text-center text-red-700">
+              {error}
+            </p>
           )}
 
           {/* Result */}

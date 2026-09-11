@@ -1,10 +1,24 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
+
+const API_URL = process.env.REACT_APP_API_URL || "http://localhost:5000";
 
 function FarmingPreferences({ onBack }) {
-  const [category, setCategory] = useState("");
-  const [season, setSeason] = useState("");
-  const [crop, setCrop] = useState("");
+  const [preferences, setPreferences] = useState({});
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+  const { category = "", season = "", crop = "" } = preferences;
   const [saved, setSaved] = useState(false);
+
+  useEffect(() => {
+    fetch(`${API_URL}/api/auth/preferences`, { credentials: "include" })
+      .then(async (response) => {
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.message || "Could not load preferences.");
+        setPreferences(data.preferences || {});
+      })
+      .catch((loadError) => setError(loadError.message))
+      .finally(() => setLoading(false));
+  }, []);
 
   const crops = {
     "🌾 Anaj / Grains": ["Wheat", "Rice", "Maize", "Bajra", "Barley"],
@@ -37,13 +51,32 @@ function FarmingPreferences({ onBack }) {
     ],
   };
 
-  const handleSave = () => {
+  const handleSave = async () => {
     if (!category || !season || !crop) {
       alert("Please select Category, Season and Crop.");
       return;
     }
 
-    setSaved(true);
+    try {
+      const response = await fetch(`${API_URL}/api/auth/preferences`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ category, season, crop }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.message || "Could not save preferences.");
+      setPreferences(data.preferences);
+      setSaved(true);
+      setError("");
+    } catch (saveError) {
+      setError(saveError.message);
+    }
+  };
+
+  const updatePreference = (name, value) => {
+    setPreferences((current) => ({ ...current, [name]: value }));
+    setSaved(false);
   };
 
   return (
@@ -64,6 +97,8 @@ function FarmingPreferences({ onBack }) {
 
       {/* Main */}
       <div className="max-w-3xl mx-auto px-6 py-10">
+        {loading && <p className="text-center text-gray-600 mb-4">Loading preferences...</p>}
+        {error && <p className="text-center text-red-600 mb-4">{error}</p>}
         <div className="text-center mb-8">
           <h2 className="text-4xl font-bold text-gray-800">
             🌾 Farming Preferences
@@ -85,8 +120,11 @@ function FarmingPreferences({ onBack }) {
             <select
               value={category}
               onChange={(e) => {
-                setCategory(e.target.value);
-                setCrop("");
+                setPreferences((current) => ({
+                  ...current,
+                  category: e.target.value,
+                  crop: "",
+                }));
                 setSaved(false);
               }}
               className="w-full border border-gray-300 rounded-lg px-4 py-3 focus:outline-none focus:ring-2 focus:ring-green-500"
@@ -109,10 +147,7 @@ function FarmingPreferences({ onBack }) {
 
             <select
               value={season}
-              onChange={(e) => {
-                setSeason(e.target.value);
-                setSaved(false);
-              }}
+              onChange={(e) => updatePreference("season", e.target.value)}
               className="w-full border border-gray-300 rounded-lg px-4 py-3 focus:outline-none focus:ring-2 focus:ring-green-500"
             >
               <option value="">Select Season</option>
@@ -130,10 +165,7 @@ function FarmingPreferences({ onBack }) {
 
             <select
               value={crop}
-              onChange={(e) => {
-                setCrop(e.target.value);
-                setSaved(false);
-              }}
+              onChange={(e) => updatePreference("crop", e.target.value)}
               disabled={!category}
               className="w-full border border-gray-300 rounded-lg px-4 py-3 disabled:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-green-500"
             >

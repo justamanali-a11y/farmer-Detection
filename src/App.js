@@ -1,45 +1,67 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
+import { useLocation, useNavigate } from "react-router-dom";
 import Login from "./Login";
 import FarmerProfile from "./components/FarmerProfile";
 import FarmingPreferences from "./components/FarmingPreferences";
 import DetectDisease from "./components/DetectDisease";
 
+const API_URL = process.env.REACT_APP_API_URL || "http://localhost:5000";
+
+function Toast({ message }) {
+  if (!message) return null;
+
+  return (
+    <div className="fixed top-5 left-1/2 -translate-x-1/2 z-[100] w-[90%] max-w-md">
+      <div className="bg-gray-900/95 text-white border border-green-700/50 shadow-2xl rounded-2xl px-5 py-4 text-center font-medium">
+        {message}
+      </div>
+    </div>
+  );
+}
+
 function App() {
   // ================= LOGIN SESSION =================
 
-  const [isLoggedIn, setIsLoggedIn] = useState(() => {
-    return localStorage.getItem("isLoggedIn") === "true";
-  });
+  const [isLoggedIn, setIsLoggedIn] = useState(false);
+  const [authLoading, setAuthLoading] = useState(true);
 
-  // ================= CURRENT PAGE =================
-
-  const [currentPage, setCurrentPage] = useState(() => {
-    return localStorage.getItem("currentPage") || "home";
-  });
+  const location = useLocation();
+  const navigate = useNavigate();
+  const pageByPath = {
+    "/": "home",
+    "/login": "login",
+    "/signup": "signup",
+    "/profile": "profile",
+    "/preferences": "preferences",
+    "/detect": "detect",
+  };
+  const currentPage = pageByPath[location.pathname] || "home";
 
   // ================= PROFILE =================
 
-  const [profile, setProfile] = useState(() => {
-    const savedProfile = localStorage.getItem("farmerProfile");
+  const [profile, setProfile] = useState(null);
 
-    if (!savedProfile) return null;
-
-    try {
-      const data = JSON.parse(savedProfile);
-
-      return {
-        ...data,
-        password: undefined,
-      };
-    } catch (error) {
-      console.error("Profile loading error:", error);
-      return null;
-    }
-  });
+  useEffect(() => {
+    fetch(`${API_URL}/api/auth/me`, { credentials: "include" })
+      .then(async (response) => {
+        if (!response.ok) throw new Error("No active session");
+        return response.json();
+      })
+      .then(({ user }) => {
+        setProfile(user);
+        setIsLoggedIn(true);
+      })
+      .catch(() => {
+        setProfile(null);
+        setIsLoggedIn(false);
+      })
+      .finally(() => setAuthLoading(false));
+  }, []);
 
   // ================= MOBILE MENU =================
 
   const [mobileMenu, setMobileMenu] = useState(false);
+  const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
 
   // ================= TOAST =================
 
@@ -58,9 +80,13 @@ function App() {
   // ================= NAVIGATION =================
 
   const navigateTo = (page) => {
-    setCurrentPage(page);
-
-    localStorage.setItem("currentPage", page);
+    const pathByPage = {
+      home: "/",
+      profile: "/profile",
+      preferences: "/preferences",
+      detect: "/detect",
+    };
+    navigate(pathByPage[page] || "/");
 
     setMobileMenu(false);
 
@@ -72,199 +98,66 @@ function App() {
 
   // ================= LOGIN =================
 
-  const handleLogin = (loginEmail, loginPassword) => {
-    const email = loginEmail.trim().toLowerCase();
-
-    if (!email || !loginPassword) {
-      showToast("⚠️ Please enter email and password.");
-      return;
-    }
-
-    const emailRegex =
-      /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
-
-    if (!emailRegex.test(email)) {
-      showToast("⚠️ Please enter a valid email.");
-      return;
-    }
-
-    const savedProfile =
-      localStorage.getItem("farmerProfile");
-
-    if (!savedProfile) {
-      showToast(
-        "🌱 No account found. Create your profile first."
-      );
-      return;
-    }
-
-    let farmer;
-
+  const handleLogin = async (loginEmail, loginPassword) => {
     try {
-      farmer = JSON.parse(savedProfile);
+      const response = await fetch(`${API_URL}/api/auth/login`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ email: loginEmail, password: loginPassword }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.message || "Login failed.");
+      setProfile(data.user);
+      setIsLoggedIn(true);
+      navigate("/");
+      showToast("🌾 Welcome back to FarmerDetect!");
     } catch (error) {
-      console.error("Profile parsing error:", error);
-
-      showToast(
-        "❌ Profile data is corrupted. Please create it again."
-      );
-
-      return;
+      showToast(`❌ ${error.message}`);
     }
-
-    const savedEmail = String(farmer.email || "")
-      .trim()
-      .toLowerCase();
-
-    const savedPassword = String(
-      farmer.password || ""
-    );
-
-    // Email check
-
-    if (email !== savedEmail) {
-      showToast(
-        "❌ Email is not registered."
-      );
-      return;
-    }
-
-    // Password check
-
-    if (loginPassword !== savedPassword) {
-      showToast(
-        "❌ Incorrect password."
-      );
-      return;
-    }
-
-    // Login successful
-
-    setProfile({
-      ...farmer,
-      password: undefined,
-    });
-
-    setIsLoggedIn(true);
-    setCurrentPage("home");
-
-    localStorage.setItem(
-      "isLoggedIn",
-      "true"
-    );
-
-    localStorage.setItem(
-      "currentPage",
-      "home"
-    );
-
-    showToast(
-      "🌾 Welcome back to FarmerDetect!"
-    );
   };
 
   // ================= DEMO LOGIN =================
 
-  const handleDemoAccount = () => {
-    const demoProfile = {
-      name: "Demo Farmer",
-      email: "demo@gmail.com",
-      password: "Demo1234",
-      phone: "9876543210",
-      location: "Jaipur, Rajasthan",
-      farmSize: "5",
-      crop: "Tomato",
-      category: "🥬 Vegetables",
-      season: "Kharif",
-      profileImage: "",
-    };
-
-    localStorage.setItem(
-      "farmerProfile",
-      JSON.stringify(demoProfile)
-    );
-
-    setProfile({
-      ...demoProfile,
-      password: undefined,
-    });
-
-    setIsLoggedIn(true);
-    setCurrentPage("home");
-
-    localStorage.setItem(
-      "isLoggedIn",
-      "true"
-    );
-
-    localStorage.setItem(
-      "currentPage",
-      "home"
-    );
-
-    showToast(
-      "🚜 Demo account logged in!"
-    );
-  };
-
   // ================= LOGOUT =================
 
   const handleLogout = () => {
-    setIsLoggedIn(false);
-    setCurrentPage("home");
-    setProfile(null);
-    setMobileMenu(false);
-
-    localStorage.removeItem("isLoggedIn");
-    localStorage.removeItem("currentPage");
-
-    showToast(
-      "👋 Logged out successfully."
-    );
+    fetch(`${API_URL}/api/auth/logout`, {
+      method: "POST",
+      credentials: "include",
+    }).finally(() => {
+      setIsLoggedIn(false);
+      navigate("/login");
+      setProfile(null);
+      setMobileMenu(false);
+      showToast("👋 Logged out successfully.");
+    });
   };
+
+  if (authLoading) return null;
 
   // =====================================================
   // NEW PROFILE
   // =====================================================
 
   if (
-    currentPage === "profile" &&
+    currentPage === "signup" &&
     !isLoggedIn
   ) {
     return (
       <>
         <FarmerProfile
           onBack={() => {
-            setCurrentPage("home");
-
-            localStorage.setItem(
-              "currentPage",
-              "home"
-            );
+            navigate("/login");
           }}
           onProfileCreated={(newProfile) => {
-            localStorage.setItem(
-              "farmerProfile",
-              JSON.stringify(newProfile)
-            );
-
             setProfile({
               ...newProfile,
               password: undefined,
             });
 
             setIsLoggedIn(true);
-            setCurrentPage("home");
-
-            localStorage.setItem(
-              "isLoggedIn",
-              "true"
-            );
-
-            localStorage.setItem(
-              "currentPage",
-              "home"
-            );
+            navigate("/");
 
             showToast(
               "🌾 Profile created! Welcome to FarmerDetect."
@@ -279,18 +172,15 @@ function App() {
 
   if (!isLoggedIn) {
     return (
-      <Login
-        onLogin={handleLogin}
-        onDemoLogin={handleDemoAccount}
-        onCreateProfile={() => {
-          setCurrentPage("profile");
-
-          localStorage.setItem(
-            "currentPage",
-            "profile"
-          );
-        }}
-      />
+      <>
+        <Toast message={toast} />
+        <Login
+          onLogin={handleLogin}
+          onCreateProfile={() => {
+            navigate("/signup");
+          }}
+        />
+      </>
     );
   }
 
@@ -301,28 +191,13 @@ function App() {
       <FarmerProfile
         onBack={() => navigateTo("home")}
         onProfileCreated={(updatedProfile) => {
-          localStorage.setItem(
-            "farmerProfile",
-            JSON.stringify(updatedProfile)
-          );
-
           setProfile({
             ...updatedProfile,
             password: undefined,
           });
 
           setIsLoggedIn(true);
-          setCurrentPage("home");
-
-          localStorage.setItem(
-            "isLoggedIn",
-            "true"
-          );
-
-          localStorage.setItem(
-            "currentPage",
-            "home"
-          );
+          navigate("/");
 
           showToast(
             "✅ Profile updated successfully!"
@@ -419,6 +294,46 @@ function App() {
         </div>
       )}
 
+      {showLogoutConfirm && (
+        <div className="fixed inset-0 z-[110] flex items-center justify-center bg-black/70 px-4 backdrop-blur-sm">
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="logout-title"
+            className="w-full max-w-sm rounded-2xl border border-red-500/30 bg-gray-900 p-6 text-center shadow-2xl shadow-red-950/40"
+          >
+            <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-red-500/15 text-2xl text-red-400">
+              🚪
+            </div>
+            <h2 id="logout-title" className="text-xl font-bold text-white">
+              Logout from FarmerDetect?
+            </h2>
+            <p className="mt-2 text-sm text-gray-400">
+              Are you sure you want to logout?
+            </p>
+            <div className="mt-6 flex gap-3">
+              <button
+                type="button"
+                onClick={() => setShowLogoutConfirm(false)}
+                className="flex-1 rounded-xl border border-gray-700 bg-gray-800 px-4 py-3 font-semibold text-gray-300 transition hover:bg-gray-700"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setShowLogoutConfirm(false);
+                  handleLogout();
+                }}
+                className="flex-1 rounded-xl bg-red-600 px-4 py-3 font-semibold text-white transition hover:bg-red-500"
+              >
+                Logout
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* ================= NAVBAR ================= */}
 
       <nav className="sticky top-0 z-50 bg-gray-950/85 backdrop-blur-xl border-b border-green-900/40">
@@ -492,7 +407,7 @@ function App() {
               </NavButton>
 
               <button
-                onClick={handleLogout}
+                onClick={() => setShowLogoutConfirm(true)}
                 className="ml-3 px-4 py-2 rounded-xl bg-red-500/10 border border-red-500/20 text-red-400 hover:bg-red-500 hover:text-white transition-all duration-300"
               >
                 Logout
@@ -545,7 +460,7 @@ function App() {
               </MobileNavButton>
 
               <button
-                onClick={handleLogout}
+                onClick={() => setShowLogoutConfirm(true)}
                 className="w-full text-left px-4 py-3 rounded-xl bg-red-500/10 text-red-400 hover:bg-red-500/20 transition"
               >
                 🚪 Logout
