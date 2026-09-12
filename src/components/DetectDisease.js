@@ -38,10 +38,17 @@ function DetectDisease({ onBack }) {
     setError("");
 
     try {
-      const response = await fetch(`${API_URL}/api/health`);
+      const formData = new FormData();
+      formData.append("image", selectedFile);
+      const response = await fetch(`${API_URL}/api/detection/predict`, {
+        method: "POST",
+        credentials: "include",
+        body: formData,
+      });
 
       if (!response.ok) {
-        throw new Error(`Backend returned ${response.status}`);
+        const failure = await response.json().catch(() => ({}));
+        throw new Error(failure.message || `Backend returned ${response.status}`);
       }
 
       const data = await response.json();

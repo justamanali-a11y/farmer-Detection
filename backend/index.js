@@ -6,6 +6,7 @@ const helmet = require("helmet");
 const rateLimit = require("express-rate-limit");
 const connectDB = require("./config/DB")
 const authRoutes = require("./routes/authRoutes");
+const detectionRoutes = require("./routes/detectionRoutes");
 
 const app = express();
 const port = process.env.PORT || 5000;
@@ -36,6 +37,7 @@ app.use("/api/auth", rateLimit({
 }));
 
 app.use("/api/auth", authRoutes);
+app.use("/api/detection", detectionRoutes);
 
 app.get("/api/health", (req, res) => {
     // api handle karega ai ko or jo data milega use res se send karega
@@ -55,5 +57,5 @@ app.listen(port, () => {
 
 app.use((error, req, res, next) => {
     console.error("Unhandled API error:", error.message);
-    res.status(error.status || 500).json({ message: "Something went wrong. Please try again." });
+    res.status(error.status || 400).json({ message: error.message || "Something went wrong. Please try again." });
 });
