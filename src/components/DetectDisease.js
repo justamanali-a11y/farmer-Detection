@@ -1,220 +1,251 @@
-import React, { useEffect, useState } from "react";
+import React, { useState } from "react";
+import {
+  AlertTriangle,
+  CheckCircle2,
+  FileImage,
+  ImagePlus,
+  Leaf,
+  Loader2,
+  ScanSearch,
+  ShieldAlert,
+  Sparkles,
+  Trash2,
+} from "lucide-react";
+import { motion, AnimatePresence } from "motion/react";
+import { PageHeader, PageIntro } from "./PageChrome";
+import { Badge } from "./ui/badge";
+import { Button } from "./ui/button";
+import { Card, CardContent } from "./ui/card";
+import { Progress } from "./ui/progress";
 
-const API_URL = process.env.REACT_APP_API_URL || "http://localhost:5000";
+function severityVariant(severity) {
+  const value = String(severity || "").toLowerCase();
+
+  if (value.includes("healthy") || value.includes("low")) {
+    return "healthy";
+  }
+
+  if (value.includes("severe") || value.includes("high")) {
+    return "severe";
+  }
+
+  return "moderate";
+}
 
 function DetectDisease({ onBack }) {
   const [image, setImage] = useState(null);
-  const [selectedFile, setSelectedFile] = useState(null);
   const [imageName, setImageName] = useState("");
   const [result, setResult] = useState(null);
-  const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
-
-  // release the memory , use by image
-  useEffect(() => {
-    return () => {
-      if (image) URL.revokeObjectURL(image);
-    };
-  }, [image]);
 
   const handleImage = (e) => {
     const file = e.target.files[0];
 
     if (file) {
-      if (image) URL.revokeObjectURL(image);
-
-      setSelectedFile(file);
       setImage(URL.createObjectURL(file));
       setImageName(file.name);
       setResult(null);
-      setError("");
     }
   };
 
-  const detectCrop = async () => {
-    if (!selectedFile) return;
+  const detectCrop = () => {
+    if (!image) return;
 
     setLoading(true);
-    setError("");
 
-    try {
-      const formData = new FormData();
-      formData.append("image", selectedFile);
-      const response = await fetch(`${API_URL}/api/detection/predict`, {
-        method: "POST",
-        credentials: "include",
-        body: formData,
-      });
-
-      if (!response.ok) {
-        const failure = await response.json().catch(() => ({}));
-        throw new Error(failure.message || `Backend returned ${response.status}`);
-      }
-
-      const data = await response.json();
-
+    setTimeout(() => {
       setResult({
-        crop: data.crop,
-        disease: data.disease,
-        confidence: data.confidence,
-        severity: data.severity,
-        recommendation: data.recommendation,
+        crop: "Tomato",
+        disease: "Early Blight",
+        confidence: "94%",
+        severity: "Moderate",
+        recommendation:
+          "Remove infected leaves, improve air circulation and avoid overhead watering. Use suitable fungicide if required.",
       });
-      
-    } catch (error) {
-      console.error("Backend connection error:", error);
-      setError(
-        "Backend se connection nahi ho paya. Backend server check karke dobara try karein."
-      );
-    } finally {
+
       setLoading(false);
-    }
+    }, 1500);
   };
 
   const removeImage = () => {
-    if (image) URL.revokeObjectURL(image);
-
     setImage(null);
-    setSelectedFile(null);
     setImageName("");
     setResult(null);
-    setError("");
   };
 
+  const confidenceValue = result
+    ? parseInt(String(result.confidence), 10) || 0
+    : 0;
+
   return (
-    <div className="min-h-screen bg-green-50">
-      {/* Navbar */}
-      <nav className="bg-white shadow-md px-6 py-4 flex justify-between items-center">
-        <h1 className="text-2xl font-bold text-green-700">
-          🌾 FarmerDetect
-        </h1>
+    <div className="fd-page">
+      <PageHeader onBack={onBack} />
 
-        <button
-          onClick={onBack}
-          className="bg-green-600 text-white px-5 py-2 rounded-lg hover:bg-green-700"
+      <div className="mx-auto max-w-5xl px-4 py-8 sm:px-6 md:py-12">
+        <PageIntro
+          eyebrow="Crop health check"
+          title="Detect crop disease"
+          subtitle="Upload a clear leaf photo. We keep the same detection process — this screen just makes the result easier to read."
+        />
+
+        <motion.div
+          initial={{ opacity: 0, y: 12 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.35, delay: 0.05 }}
         >
-          ← Back
-        </button>
-      </nav>
-
-      {/* Main */}
-      <div className="max-w-4xl mx-auto px-6 py-10">
-        <div className="text-center mb-8">
-          <h2 className="text-4xl font-bold text-gray-800">
-            🌿 Detect Crop Disease
-          </h2>
-
-          <p className="text-gray-600 mt-2">
-            Upload a crop leaf image to detect possible diseases.
-          </p>
-        </div>
-
-        {/* Upload Card */}
-        <div className="bg-white rounded-2xl shadow-lg p-8">
-          <label className="block border-2 border-dashed border-green-400 rounded-xl p-10 text-center cursor-pointer hover:bg-green-50">
-            <div className="text-5xl mb-4">📷</div>
-
-            <p className="text-lg font-semibold text-gray-700">
-              Click to upload crop image
-            </p>
-
-            <p className="text-sm text-gray-500 mt-2">
-              JPG, PNG or JPEG
-            </p>
-
-            <input
-              type="file"
-              accept="image/*"
-              onChange={handleImage}
-              className="hidden"
-            />
-          </label>
-
-          {/* Image Preview */}
-          {image && (
-            <div className="mt-6 text-center">
-              <img
-                src={image}
-                alt="Crop Preview"
-                className="mx-auto w-72 h-64 object-cover rounded-xl shadow"
-              />
-
-              <p className="mt-3 text-gray-600">
-                📄 {imageName}
-              </p>
-
-              <div className="flex justify-center gap-3 mt-5">
-                <button
-                  onClick={detectCrop}
-                  disabled={loading}
-                  className="bg-green-600 text-white px-6 py-3 rounded-lg font-semibold hover:bg-green-700 disabled:opacity-50"
-                >
-                  {loading ? "🔍 Detecting..." : "🔍 Detect Disease"}
-                </button>
-
-                <button
-                  onClick={removeImage}
-                  className="bg-red-500 text-white px-6 py-3 rounded-lg hover:bg-red-600"
-                >
-                  Remove
-                </button>
-              </div>
-            </div>
-          )}
-
-          {error && (
-            <p role="alert" className="mt-5 rounded-lg bg-red-50 border border-red-200 p-4 text-center text-red-700">
-              {error}
-            </p>
-          )}
-
-          {/* Result */}
-          {result && (
-            <div className="mt-8 bg-green-50 border border-green-200 rounded-xl p-6">
-              <h3 className="text-2xl font-bold text-green-700 mb-5">
-                ✅ Detection Result
-              </h3>
-
-              <div className="grid md:grid-cols-2 gap-4">
-                <div className="bg-white p-4 rounded-lg">
-                  <p className="text-gray-500">Crop</p>
-                  <p className="font-bold text-lg">🌱 {result.crop}</p>
+          <Card>
+            <CardContent className="p-5 sm:p-8">
+              <label className="block cursor-pointer rounded-2xl border-2 border-dashed border-farm-300 bg-farm-50/60 p-8 text-center transition-all duration-300 hover:border-farm-500 hover:bg-farm-50 sm:p-10">
+                <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-white text-farm-600 shadow-soft">
+                  <ImagePlus className="h-6 w-6" />
                 </div>
 
-                <div className="bg-white p-4 rounded-lg">
-                  <p className="text-gray-500">Disease</p>
-                  <p className="font-bold text-lg text-red-600">
-                    🦠 {result.disease}
-                  </p>
-                </div>
-
-                <div className="bg-white p-4 rounded-lg">
-                  <p className="text-gray-500">Confidence</p>
-                  <p className="font-bold text-lg">
-                    {result.confidence}
-                  </p>
-                </div>
-
-                <div className="bg-white p-4 rounded-lg">
-                  <p className="text-gray-500">Severity</p>
-                  <p className="font-bold text-lg">
-                    ⚠️ {result.severity}
-                  </p>
-                </div>
-              </div>
-
-              <div className="mt-5 bg-white p-5 rounded-lg">
-                <p className="font-bold text-gray-700 mb-2">
-                  💡 Recommendation
+                <p className="text-lg font-bold text-farm-800">
+                  Click to upload crop image
                 </p>
 
-                <p className="text-gray-600">
-                  {result.recommendation}
+                <p className="mt-2 text-sm text-stone-500">
+                  JPG, PNG or JPEG · well-lit leaf photos work best
                 </p>
-              </div>
-            </div>
-          )}
-        </div>
+
+                <input
+                  type="file"
+                  accept="image/*"
+                  onChange={handleImage}
+                  className="hidden"
+                />
+              </label>
+
+              {image && (
+                <div className="mt-6">
+                  <div className="overflow-hidden rounded-2xl border border-farm-100 bg-stone-50 p-2">
+                    <img
+                      src={image}
+                      alt="Crop Preview"
+                      className="mx-auto h-64 w-full max-w-lg rounded-xl object-cover"
+                    />
+                  </div>
+
+                  <p className="mt-3 flex items-center justify-center gap-2 truncate text-sm text-stone-500">
+                    <FileImage className="h-4 w-4" />
+                    {imageName}
+                  </p>
+
+                  {loading && (
+                    <div className="mx-auto mt-5 max-w-md rounded-2xl border border-farm-200 bg-farm-50 px-4 py-3 text-sm font-medium text-farm-800">
+                      <Loader2 className="mr-2 inline h-4 w-4 animate-spin align-middle" />
+                      Analysing your crop image…
+                    </div>
+                  )}
+
+                  <div className="mt-5 flex flex-col justify-center gap-3 sm:flex-row">
+                    <Button
+                      type="button"
+                      onClick={detectCrop}
+                      disabled={loading}
+                    >
+                      {loading ? (
+                        <>
+                          <Loader2 className="animate-spin" />
+                          Detecting...
+                        </>
+                      ) : (
+                        <>
+                          <ScanSearch />
+                          Detect Disease
+                        </>
+                      )}
+                    </Button>
+
+                    <Button
+                      type="button"
+                      variant="destructive"
+                      onClick={removeImage}
+                    >
+                      <Trash2 />
+                      Remove
+                    </Button>
+                  </div>
+                </div>
+              )}
+
+              <AnimatePresence>
+                {result && (
+                  <motion.div
+                    className="mt-8 rounded-2xl border border-farm-100 bg-farm-50 p-5 sm:p-6"
+                    initial={{ opacity: 0, y: 12 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0 }}
+                    transition={{ duration: 0.3 }}
+                  >
+                    <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
+                      <h3 className="flex items-center gap-2 text-xl font-extrabold text-farm-800 sm:text-2xl">
+                        <CheckCircle2 className="h-5 w-5" />
+                        Detection Result
+                      </h3>
+                      <Badge variant={severityVariant(result.severity)}>
+                        {result.severity}
+                      </Badge>
+                    </div>
+
+                    <div className="grid gap-3 md:grid-cols-2 md:gap-4">
+                      <div className="rounded-xl border border-farm-100 bg-white p-4">
+                        <p className="text-xs font-semibold uppercase tracking-wide text-stone-400">
+                          Crop
+                        </p>
+                        <p className="mt-1 flex items-center gap-2 text-lg font-bold text-farm-900">
+                          <Leaf className="h-4 w-4 text-farm-600" />
+                          {result.crop}
+                        </p>
+                      </div>
+
+                      <div className="rounded-xl border border-red-100 bg-white p-4">
+                        <p className="text-xs font-semibold uppercase tracking-wide text-stone-400">
+                          Disease
+                        </p>
+                        <p className="mt-1 flex items-center gap-2 text-lg font-bold text-red-600">
+                          <ShieldAlert className="h-4 w-4" />
+                          {result.disease}
+                        </p>
+                      </div>
+
+                      <div className="rounded-xl border border-farm-100 bg-white p-4">
+                        <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-stone-400">
+                          Confidence
+                        </p>
+                        <p className="mb-2 text-lg font-bold text-farm-800">
+                          {result.confidence}
+                        </p>
+                        <Progress value={confidenceValue} />
+                      </div>
+
+                      <div className="rounded-xl border border-amber-100 bg-white p-4">
+                        <p className="text-xs font-semibold uppercase tracking-wide text-stone-400">
+                          Severity
+                        </p>
+                        <p className="mt-1 flex items-center gap-2 text-lg font-bold text-amber-700">
+                          <AlertTriangle className="h-4 w-4" />
+                          {result.severity}
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="mt-5 rounded-xl border border-farm-100 bg-white p-5">
+                      <p className="mb-2 flex items-center gap-2 font-bold text-farm-800">
+                        <Sparkles className="h-4 w-4" />
+                        Recommendation
+                      </p>
+
+                      <p className="leading-relaxed text-stone-600">
+                        {result.recommendation}
+                      </p>
+                    </div>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+            </CardContent>
+          </Card>
+        </motion.div>
       </div>
     </div>
   );

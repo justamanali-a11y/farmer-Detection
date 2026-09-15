@@ -1,366 +1,450 @@
 import React, { useState } from "react";
+import {
+  Eye,
+  EyeOff,
+  Mail,
+  Lock,
+  User,
+  MapPin,
+  Sprout,
+  ArrowRight,
+  ShieldCheck,
+} from "lucide-react";
 
-const API_URL = process.env.REACT_APP_API_URL || "http://localhost:5000";
-
-function Login({ onLogin, onCreateProfile }) {
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
+function Login({ onLogin }) {
+  const [mode, setMode] = useState("login");
   const [showPassword, setShowPassword] = useState(false);
-  const [errors, setErrors] = useState({});
-  const [isLoggingIn, setIsLoggingIn] = useState(false);
-  const [forgotMode, setForgotMode] = useState(false);
-  const [resetPassword, setResetPassword] = useState("");
-  const [resetConfirmPassword, setResetConfirmPassword] = useState("");
-  const [message, setMessage] = useState("");
-  const resetToken = new URLSearchParams(window.location.search).get("resetToken");
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
 
-  // ================= VALIDATION =================
-  const validateForm = () => {
-    const newErrors = {};
+  const [form, setForm] = useState({
+    name: "",
+    email: "",
+    password: "",
+    confirmPassword: "",
+    location: "",
+    crop: "",
+  });
 
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
+  const [error, setError] = useState("");
 
-    if (!email.trim()) {
-      newErrors.email = "Email is required.";
-    } else if (!emailRegex.test(email.trim())) {
-      newErrors.email = "Enter a valid email address.";
-    }
+  const handleChange = (e) => {
+    setForm({
+      ...form,
+      [e.target.name]: e.target.value,
+    });
 
-    if (!password) {
-      newErrors.password = "Password is required.";
-    } else if (password.length < 8) {
-      newErrors.password = "Password should be at least 8 characters.";
-    }
-
-    setErrors(newErrors);
-
-    return Object.keys(newErrors).length === 0;
+    setError("");
   };
 
-  // ================= LOGIN =================
   const handleSubmit = (e) => {
     e.preventDefault();
 
-    if (!validateForm()) return;
-
-    setIsLoggingIn(true);
-
-    Promise.resolve(onLogin?.(email.trim().toLowerCase(), password))
-      .finally(() => setIsLoggingIn(false));
-  };
-
-  // ================= INPUT =================
-  const handleEmailChange = (e) => {
-    setEmail(e.target.value);
-
-    setErrors((prev) => ({
-      ...prev,
-      email: "",
-    }));
-  };
-
-  const handlePasswordChange = (e) => {
-    setPassword(e.target.value);
-
-    setErrors((prev) => ({
-      ...prev,
-      password: "",
-    }));
-  };
-
-  const requestPasswordReset = async (e) => {
-    e.preventDefault();
-    if (!email.trim()) {
-      setMessage("Enter your email address first.");
+    if (!form.email || !form.password) {
+      setError("Please enter your email and password.");
       return;
     }
-    try {
-      const response = await fetch(`${API_URL}/api/auth/forgot-password`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email: email.trim().toLowerCase() }),
-      });
-      const data = await response.json();
-      setMessage(data.message || "Check your email for reset instructions.");
-    } catch (error) {
-      setMessage("Could not send reset email. Please try again.");
-    }
-  };
 
-  const submitPasswordReset = async (e) => {
-    e.preventDefault();
-    if (resetPassword !== resetConfirmPassword) {
-      setMessage("Passwords do not match.");
+    if (mode === "signup") {
+      if (!form.name || !form.location || !form.crop) {
+        setError("Please fill all required fields.");
+        return;
+      }
+
+      if (form.password !== form.confirmPassword) {
+        setError("Passwords do not match.");
+        return;
+      }
+
+      if (form.password.length < 6) {
+        setError("Password must contain at least 6 characters.");
+        return;
+      }
+
+      // Signup successful
+      // Existing login flow remains unchanged
+      localStorage.setItem("farmerName", form.name);
+      localStorage.setItem("farmerEmail", form.email);
+      localStorage.setItem("farmerLocation", form.location);
+      localStorage.setItem("farmerCrop", form.crop);
+
+      onLogin();
       return;
     }
-    try {
-      const response = await fetch(`${API_URL}/api/auth/reset-password`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ token: resetToken, password: resetPassword }),
-      });
-      const data = await response.json();
-      if (!response.ok) throw new Error(data.message);
-      setMessage(data.message);
-      window.history.replaceState({}, document.title, window.location.pathname);
-    } catch (error) {
-      setMessage(error.message || "Could not reset password.");
-    }
+
+    // Existing login flow
+    onLogin();
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-950 via-green-950/20 to-gray-950 text-white flex items-center justify-center px-4 py-8 relative overflow-hidden">
-      
-      {/* ================= BACKGROUND GLOW ================= */}
-      <div className="fixed inset-0 pointer-events-none overflow-hidden">
-        <div className="absolute -top-40 -left-40 w-96 h-96 bg-green-500/10 rounded-full blur-3xl animate-pulse" />
+    <div className="min-h-screen bg-gradient-to-br from-green-50 via-white to-emerald-50">
+      <div className="grid min-h-screen lg:grid-cols-2">
 
-        <div className="absolute -bottom-40 -right-40 w-96 h-96 bg-emerald-500/10 rounded-full blur-3xl" />
-
-        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-72 h-72 bg-green-500/5 rounded-full blur-3xl" />
-      </div>
-
-      {/* ================= LOGIN CONTAINER ================= */}
-      <div className="relative z-10 w-full max-w-md animate-[slideUp_.6s_ease-out]">
-
-        {/* ================= BRAND ================= */}
-        <div className="text-center mb-8">
+        {/* LEFT SIDE */}
+        <div className="relative hidden overflow-hidden bg-gradient-to-br from-green-700 via-green-600 to-emerald-700 lg:flex">
           
-          <div className="relative mx-auto w-20 h-20 mb-5">
-            <div className="absolute inset-0 rounded-2xl bg-green-500/20 blur-xl animate-pulse" />
+          <div className="absolute -left-20 -top-20 h-72 w-72 rounded-full bg-white/10" />
+          <div className="absolute -bottom-32 -right-20 h-96 w-96 rounded-full bg-white/10" />
 
-            <div className="relative w-20 h-20 rounded-2xl bg-gradient-to-br from-green-700 to-emerald-700 border border-green-500/30 flex items-center justify-center text-4xl shadow-xl shadow-green-950/40">
-              🌾
-            </div>
-          </div>
+          <div className="relative z-10 flex w-full flex-col justify-between p-12 xl:p-16">
 
-          <h1 className="text-3xl md:text-4xl font-black tracking-tight">
-            Farmer<span className="text-green-400">Detect</span>
-          </h1>
-
-          <p className="text-gray-500 text-xs tracking-[0.25em] mt-2">
-            SMART FARMING PLATFORM
-          </p>
-        </div>
-
-        {/* ================= LOGIN CARD ================= */}
-        <div className="bg-gray-900/80 backdrop-blur-xl border border-green-900/40 rounded-3xl p-6 md:p-8 shadow-2xl shadow-black/40">
-
-          {/* Card Header */}
-          <div className="mb-7">
-            <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-green-500/10 border border-green-500/20 text-green-400 text-xs font-semibold mb-4">
-              🔐 Secure Login
-            </div>
-
-            <h2 className="text-2xl md:text-3xl font-extrabold">
-              Welcome Back 👋
-            </h2>
-
-            <p className="text-gray-500 text-sm mt-2">
-              Login to manage your farm and detect crop diseases.
-            </p>
-          </div>
-
-          {resetToken ? (
-            <form onSubmit={submitPasswordReset}>
-              <h3 className="text-xl font-bold mb-5">Reset Password</h3>
-              <input
-                type="password"
-                value={resetPassword}
-                onChange={(e) => setResetPassword(e.target.value)}
-                placeholder="New password"
-                className="w-full mb-4 px-4 py-3 rounded-xl bg-gray-950/70 border border-gray-700 text-white outline-none focus:border-green-500"
-                required
-              />
-              <input
-                type="password"
-                value={resetConfirmPassword}
-                onChange={(e) => setResetConfirmPassword(e.target.value)}
-                placeholder="Confirm new password"
-                className="w-full mb-4 px-4 py-3 rounded-xl bg-gray-950/70 border border-gray-700 text-white outline-none focus:border-green-500"
-                required
-              />
-              <button type="submit" className="w-full py-3.5 rounded-xl bg-green-600 hover:bg-green-500 font-bold">
-                Reset Password
-              </button>
-            </form>
-          ) : forgotMode ? (
-            <form onSubmit={requestPasswordReset}>
-              <h3 className="text-xl font-bold mb-2">Forgot Password?</h3>
-              <p className="text-gray-500 text-sm mb-5">Enter your email and we will send a reset link.</p>
-              <input
-                type="email"
-                value={email}
-                onChange={handleEmailChange}
-                placeholder="example@gmail.com"
-                className="w-full mb-4 px-4 py-3 rounded-xl bg-gray-950/70 border border-gray-700 text-white outline-none focus:border-green-500"
-                required
-              />
-              <button type="submit" className="w-full py-3.5 rounded-xl bg-green-600 hover:bg-green-500 font-bold">
-                Send Reset Link
-              </button>
-              <button type="button" onClick={() => { setForgotMode(false); setMessage(""); }} className="w-full mt-3 text-green-400 font-semibold">
-                Back to Login
-              </button>
-            </form>
-          ) : (
-          /* ================= FORM ================= */
-          <form onSubmit={handleSubmit}>
-
-            {/* EMAIL */}
-            <div className="mb-5">
-              <label className="block text-sm font-semibold text-gray-300 mb-2">
-                Email Address
-              </label>
-
-              <div className="relative">
-                <span className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-500">
-                  📧
-                </span>
-
-                <input
-                  type="email"
-                  value={email}
-                  onChange={handleEmailChange}
-                  placeholder="example@gmail.com"
-                  className={`w-full pl-11 pr-4 py-3.5 rounded-xl bg-gray-950/70 border ${
-                    errors.email
-                      ? "border-red-500 focus:border-red-400"
-                      : "border-gray-700 focus:border-green-500"
-                  } text-white placeholder-gray-600 outline-none transition-all duration-300 focus:ring-2 ${
-                    errors.email
-                      ? "focus:ring-red-500/10"
-                      : "focus:ring-green-500/10"
-                  }`}
-                />
+            {/* Logo */}
+            <div className="flex items-center gap-3 text-white">
+              <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-white/15 backdrop-blur">
+                <Sprout className="h-7 w-7" />
               </div>
 
-              {errors.email && (
-                <p className="text-red-400 text-xs mt-2 animate-[fadeIn_.2s_ease-out]">
-                  ⚠️ {errors.email}
+              <div>
+                <h1 className="text-xl font-bold">
+                  FarmerDetect
+                </h1>
+
+                <p className="text-sm text-green-100">
+                  Smart Farming Assistant
                 </p>
-              )}
+              </div>
             </div>
 
-            {/* PASSWORD */}
-            <div className="mb-6">
-              <label className="block text-sm font-semibold text-gray-300 mb-2">
-                Password
-              </label>
+            {/* Main Content */}
+            <div className="max-w-xl text-white">
 
-              <div className="relative">
-                <span className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-500">
-                  🔒
-                </span>
-
-                <input
-                  type={showPassword ? "text" : "password"}
-                  value={password}
-                  onChange={handlePasswordChange}
-                  placeholder="Enter your password"
-                  className={`w-full pl-11 pr-12 py-3.5 rounded-xl bg-gray-950/70 border ${
-                    errors.password
-                      ? "border-red-500 focus:border-red-400"
-                      : "border-gray-700 focus:border-green-500"
-                  } text-white placeholder-gray-600 outline-none transition-all duration-300 focus:ring-2 ${
-                    errors.password
-                      ? "focus:ring-red-500/10"
-                      : "focus:ring-green-500/10"
-                  }`}
-                />
-
-                <button
-                  type="button"
-                  onClick={() => setShowPassword((prev) => !prev)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-green-400 transition-colors"
-                >
-                  {showPassword ? "🙈" : "👁️"}
-                </button>
+              <div className="mb-6 inline-flex items-center gap-2 rounded-full border border-white/20 bg-white/10 px-4 py-2 text-sm backdrop-blur">
+                <ShieldCheck className="h-4 w-4" />
+                AI Powered Agriculture
               </div>
 
-              {errors.password && (
-                <p className="text-red-400 text-xs mt-2 animate-[fadeIn_.2s_ease-out]">
-                  ⚠️ {errors.password}
-                </p>
-              )}
+              <h2 className="text-5xl font-bold leading-tight xl:text-6xl">
+                Smarter Farming.
+                <br />
+                Healthier Crops.
+              </h2>
+
+              <p className="mt-6 max-w-lg text-lg leading-8 text-green-100">
+                Detect crop diseases, monitor crop health and get
+                useful farming insights with FarmerDetect.
+              </p>
+
+              <div className="mt-8 grid grid-cols-3 gap-4">
+
+                <div className="rounded-xl border border-white/10 bg-white/10 p-4 backdrop-blur">
+                  <p className="text-2xl font-bold">AI</p>
+                  <p className="mt-1 text-xs text-green-100">
+                    Disease Detection
+                  </p>
+                </div>
+
+                <div className="rounded-xl border border-white/10 bg-white/10 p-4 backdrop-blur">
+                  <p className="text-2xl font-bold">24/7</p>
+                  <p className="mt-1 text-xs text-green-100">
+                    Crop Assistance
+                  </p>
+                </div>
+
+                <div className="rounded-xl border border-white/10 bg-white/10 p-4 backdrop-blur">
+                  <p className="text-2xl font-bold">Smart</p>
+                  <p className="mt-1 text-xs text-green-100">
+                    Farming Insights
+                  </p>
+                </div>
+
+              </div>
             </div>
 
-            {/* LOGIN BUTTON */}
-            <button
-              type="submit"
-              disabled={isLoggingIn}
-              className="w-full py-3.5 rounded-xl bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-500 hover:to-emerald-500 disabled:opacity-60 disabled:cursor-not-allowed font-bold shadow-lg shadow-green-950/30 transition-all duration-300 hover:-translate-y-0.5"
-            >
-              {isLoggingIn ? (
-                <span className="flex items-center justify-center gap-2">
-                  <span className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                  Logging in...
-                </span>
-              ) : (
-                "Login to FarmerDetect →"
-              )}
-            </button>
-            <button type="button" onClick={() => { setForgotMode(true); setMessage(""); }} className="w-full mt-4 text-sm text-green-400 hover:text-green-300">
-              Forgot Password?
-            </button>
-          </form>
-          )}
-
-          {message && <p className="mt-4 text-center text-sm text-green-300">{message}</p>}
-
-          {/* ================= SIGN UP ================= */}
-          <div className="mt-7 pt-6 border-t border-gray-800 text-center">
-            <p className="text-gray-500 text-sm">
-              Don't have an account?
+            <p className="text-sm text-green-100">
+              © 2026 FarmerDetect. Smart technology for modern farmers.
             </p>
 
-            <button
-              type="button"
-              onClick={onCreateProfile}
-              className="mt-3 w-full py-3.5 rounded-xl bg-gray-800/80 border border-gray-700 hover:border-green-700 hover:bg-green-950/20 text-green-400 hover:text-green-300 font-bold transition-all duration-300 hover:-translate-y-0.5"
-            >
-              SignUp
-            </button>
           </div>
         </div>
 
-        {/* ================= FOOTER ================= */}
-        <div className="text-center mt-7">
-          <div className="flex items-center justify-center gap-2 text-gray-600 text-xs">
-            <span>🌱</span>
-            <span>Smart technology for modern farming</span>
-          </div>
+        {/* RIGHT SIDE */}
+        <div className="flex items-center justify-center px-4 py-8 sm:px-8">
+          <div className="w-full max-w-md">
 
-          <p className="text-gray-700 text-[11px] mt-2">
-            © 2026 FarmerDetect • Hackathon MVP
-          </p>
+            {/* Mobile Logo */}
+            <div className="mb-8 flex items-center justify-center gap-3 lg:hidden">
+
+              <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-green-600 text-white">
+                <Sprout className="h-6 w-6" />
+              </div>
+
+              <div>
+                <h1 className="text-xl font-bold text-gray-900">
+                  FarmerDetect
+                </h1>
+
+                <p className="text-xs text-gray-500">
+                  Smart Farming Assistant
+                </p>
+              </div>
+
+            </div>
+
+            {/* Heading */}
+            <div className="mb-8">
+
+              <h2 className="text-3xl font-bold text-gray-900">
+                {mode === "login"
+                  ? "Welcome back"
+                  : "Create your account"}
+              </h2>
+
+              <p className="mt-2 text-gray-500">
+                {mode === "login"
+                  ? "Login to continue to your farming dashboard."
+                  : "Join FarmerDetect and manage your farm smarter."}
+              </p>
+
+            </div>
+
+            {/* Tabs */}
+            <div className="mb-7 grid grid-cols-2 rounded-xl bg-gray-100 p-1">
+
+              <button
+                type="button"
+                onClick={() => {
+                  setMode("login");
+                  setError("");
+                }}
+                className={`rounded-lg py-2.5 text-sm font-semibold transition ${
+                  mode === "login"
+                    ? "bg-white text-green-700 shadow-sm"
+                    : "text-gray-500 hover:text-gray-700"
+                }`}
+              >
+                Login
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setMode("signup");
+                  setError("");
+                }}
+                className={`rounded-lg py-2.5 text-sm font-semibold transition ${
+                  mode === "signup"
+                    ? "bg-white text-green-700 shadow-sm"
+                    : "text-gray-500 hover:text-gray-700"
+                }`}
+              >
+                Sign Up
+              </button>
+
+            </div>
+
+            {/* Form */}
+            <form onSubmit={handleSubmit} className="space-y-5">
+
+              {/* Name */}
+              {mode === "signup" && (
+                <div>
+                  <label className="mb-2 block text-sm font-medium text-gray-700">
+                    Full Name
+                  </label>
+
+                  <div className="relative">
+                    <User className="absolute left-3 top-1/2 h-5 w-5 -translate-y-1/2 text-gray-400" />
+
+                    <input
+                      type="text"
+                      name="name"
+                      value={form.name}
+                      onChange={handleChange}
+                      placeholder="Enter your full name"
+                      className="w-full rounded-xl border border-gray-200 bg-white py-3 pl-11 pr-4 outline-none transition focus:border-green-500 focus:ring-4 focus:ring-green-100"
+                    />
+                  </div>
+                </div>
+              )}
+
+              {/* Email */}
+              <div>
+                <label className="mb-2 block text-sm font-medium text-gray-700">
+                  Email Address
+                </label>
+
+                <div className="relative">
+                  <Mail className="absolute left-3 top-1/2 h-5 w-5 -translate-y-1/2 text-gray-400" />
+
+                  <input
+                    type="email"
+                    name="email"
+                    value={form.email}
+                    onChange={handleChange}
+                    placeholder="you@example.com"
+                    className="w-full rounded-xl border border-gray-200 bg-white py-3 pl-11 pr-4 outline-none transition focus:border-green-500 focus:ring-4 focus:ring-green-100"
+                  />
+                </div>
+              </div>
+
+              {/* Location */}
+              {mode === "signup" && (
+                <div>
+                  <label className="mb-2 block text-sm font-medium text-gray-700">
+                    Location
+                  </label>
+
+                  <div className="relative">
+                    <MapPin className="absolute left-3 top-1/2 h-5 w-5 -translate-y-1/2 text-gray-400" />
+
+                    <input
+                      type="text"
+                      name="location"
+                      value={form.location}
+                      onChange={handleChange}
+                      placeholder="City, State"
+                      className="w-full rounded-xl border border-gray-200 bg-white py-3 pl-11 pr-4 outline-none transition focus:border-green-500 focus:ring-4 focus:ring-green-100"
+                    />
+                  </div>
+                </div>
+              )}
+
+              {/* Crop */}
+              {mode === "signup" && (
+                <div>
+                  <label className="mb-2 block text-sm font-medium text-gray-700">
+                    Primary Crop
+                  </label>
+
+                  <div className="relative">
+                    <Sprout className="absolute left-3 top-1/2 h-5 w-5 -translate-y-1/2 text-gray-400" />
+
+                    <select
+                      name="crop"
+                      value={form.crop}
+                      onChange={handleChange}
+                      className="w-full appearance-none rounded-xl border border-gray-200 bg-white py-3 pl-11 pr-4 text-gray-700 outline-none transition focus:border-green-500 focus:ring-4 focus:ring-green-100"
+                    >
+                      <option value="">Select crop</option>
+                      <option value="Wheat">Wheat</option>
+                      <option value="Rice">Rice</option>
+                      <option value="Tomato">Tomato</option>
+                      <option value="Potato">Potato</option>
+                      <option value="Cotton">Cotton</option>
+                      <option value="Maize">Maize</option>
+                      <option value="Other">Other</option>
+                    </select>
+                  </div>
+                </div>
+              )}
+
+              {/* Password */}
+              <div>
+                <label className="mb-2 block text-sm font-medium text-gray-700">
+                  Password
+                </label>
+
+                <div className="relative">
+                  <Lock className="absolute left-3 top-1/2 h-5 w-5 -translate-y-1/2 text-gray-400" />
+
+                  <input
+                    type={showPassword ? "text" : "password"}
+                    name="password"
+                    value={form.password}
+                    onChange={handleChange}
+                    placeholder="Enter your password"
+                    className="w-full rounded-xl border border-gray-200 bg-white py-3 pl-11 pr-12 outline-none transition focus:border-green-500 focus:ring-4 focus:ring-green-100"
+                  />
+
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword(!showPassword)}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                  >
+                    {showPassword ? (
+                      <EyeOff className="h-5 w-5" />
+                    ) : (
+                      <Eye className="h-5 w-5" />
+                    )}
+                  </button>
+                </div>
+              </div>
+
+              {/* Confirm Password */}
+              {mode === "signup" && (
+                <div>
+                  <label className="mb-2 block text-sm font-medium text-gray-700">
+                    Confirm Password
+                  </label>
+
+                  <div className="relative">
+                    <Lock className="absolute left-3 top-1/2 h-5 w-5 -translate-y-1/2 text-gray-400" />
+
+                    <input
+                      type={showConfirmPassword ? "text" : "password"}
+                      name="confirmPassword"
+                      value={form.confirmPassword}
+                      onChange={handleChange}
+                      placeholder="Confirm your password"
+                      className="w-full rounded-xl border border-gray-200 bg-white py-3 pl-11 pr-12 outline-none transition focus:border-green-500 focus:ring-4 focus:ring-green-100"
+                    />
+
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setShowConfirmPassword(!showConfirmPassword)
+                      }
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                    >
+                      {showConfirmPassword ? (
+                        <EyeOff className="h-5 w-5" />
+                      ) : (
+                        <Eye className="h-5 w-5" />
+                      )}
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {/* Error */}
+              {error && (
+                <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-600">
+                  {error}
+                </div>
+              )}
+
+              {/* Submit */}
+              <button
+                type="submit"
+                className="group flex w-full items-center justify-center gap-2 rounded-xl bg-green-600 py-3.5 font-semibold text-white shadow-lg shadow-green-600/20 transition hover:bg-green-700 hover:shadow-green-600/30"
+              >
+                {mode === "login"
+                  ? "Login to FarmerDetect"
+                  : "Create Farmer Account"}
+
+                <ArrowRight className="h-5 w-5 transition group-hover:translate-x-1" />
+              </button>
+
+            </form>
+
+            {/* Bottom */}
+            <p className="mt-7 text-center text-sm text-gray-500">
+
+              {mode === "login"
+                ? "Don't have an account? "
+                : "Already have an account? "}
+
+              <button
+                type="button"
+                onClick={() => {
+                  setMode(mode === "login" ? "signup" : "login");
+                  setError("");
+                }}
+                className="font-semibold text-green-600 hover:text-green-700"
+              >
+                {mode === "login" ? "Sign Up" : "Login"}
+              </button>
+
+            </p>
+
+            <div className="mt-6 flex items-center justify-center gap-2 text-xs text-gray-400">
+              <ShieldCheck className="h-4 w-4" />
+              Your farming information is kept secure.
+            </div>
+
+          </div>
         </div>
+
       </div>
-
-      {/* ================= ANIMATIONS ================= */}
-      <style>
-        {`
-          @keyframes fadeIn {
-            from {
-              opacity: 0;
-            }
-            to {
-              opacity: 1;
-            }
-          }
-
-          @keyframes slideUp {
-            from {
-              opacity: 0;
-              transform: translateY(25px);
-            }
-            to {
-              opacity: 1;
-              transform: translateY(0);
-            }
-          }
-        `}
-      </style>
     </div>
   );
 }

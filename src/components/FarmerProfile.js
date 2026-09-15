@@ -1,6 +1,15 @@
 import React, { useEffect, useState } from "react";
-
-const API_URL = process.env.REACT_APP_API_URL || "http://localhost:5000";
+import {
+  ArrowLeft,
+  Camera,
+  CheckCircle2,
+  MapPin,
+  Pencil,
+  UserRound,
+} from "lucide-react";
+import { motion } from "motion/react";
+import { Button } from "./ui/button";
+import { Card, CardContent } from "./ui/card";
 
 function FarmerProfile({
   onBack,
@@ -25,14 +34,7 @@ function FarmerProfile({
   });
 
   const [profileImage, setProfileImage] = useState("");
-  const [selectedImageFile, setSelectedImageFile] = useState(null);
   const [errors, setErrors] = useState({});
-  const [otp, setOtp] = useState("");
-  const [emailVerified, setEmailVerified] = useState(false);
-  const [otpLoading, setOtpLoading] = useState(false);
-  const [otpMessage, setOtpMessage] = useState("");
-  const [showPassword, setShowPassword] = useState(false);
-  const [imageUploading, setImageUploading] = useState(false);
 
   // ================= LOCATION OPTIONS =================
 
@@ -121,26 +123,31 @@ function FarmerProfile({
   // ================= LOAD PROFILE =================
 
   useEffect(() => {
-    fetch(`${API_URL}/api/auth/me`, { credentials: "include" })
-      .then((response) => (response.ok ? response.json() : null))
-      .then((data) => {
-        if (!data?.user) return;
-        const user = data.user;
-        setProfile(user);
+    const savedProfile = localStorage.getItem("farmerProfile");
+
+    if (savedProfile) {
+      try {
+        const data = JSON.parse(savedProfile);
+
+        setProfile(data);
+
         setFormData({
-          name: user.name || "",
-          email: user.email || "",
+          name: data.name || "",
+          email: data.email || "",
           password: "",
-          phone: user.phone || "",
-          location: user.location || "",
-          farmSize: user.farmSize || "",
-          crop: user.crop || "",
-          category: user.category || "",
-          season: user.season || "",
+          phone: data.phone || "",
+          location: data.location || "",
+          farmSize: data.farmSize || "",
+          crop: data.crop || "",
+          category: data.category || "",
+          season: data.season || "",
         });
-        setProfileImage(user.profileImage || "");
-      })
-      .catch((error) => console.error("Profile loading error:", error));
+
+        setProfileImage(data.profileImage || "");
+      } catch (error) {
+        console.error("Profile data error:", error);
+      }
+    }
   }, []);
 
   // ================= HANDLE INPUT =================
@@ -159,62 +166,7 @@ function FarmerProfile({
       [name]: "",
     }));
 
-    if (name === "email" && isCreating) {
-      setEmailVerified(false);
-      setOtp("");
-      setOtpMessage("");
-    }
-
     setSaved(false);
-  };
-
-  const showOtpToast = (message) => {
-    setOtpMessage(message);
-    window.setTimeout(() => setOtpMessage(""), 3000);
-  };
-
-  const sendOtp = async () => {
-    const email = formData.email.trim().toLowerCase();
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(email)) {
-      setErrors((prev) => ({ ...prev, email: "Enter a valid email address." }));
-      showOtpToast("email not valid");
-      return;
-    }
-
-    setOtpLoading(true);
-    try {
-      const response = await fetch(`${API_URL}/api/auth/send-otp`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email }),
-      });
-      const data = await response.json();
-      if (!response.ok) throw new Error(data.message || "Could not send OTP.");
-      setOtpMessage(data.message);
-    } catch (error) {
-      showOtpToast(error.message === "Enter a valid email address." ? "email not valid" : error.message);
-    } finally {
-      setOtpLoading(false);
-    }
-  };
-
-  const verifyOtp = async () => {
-    try {
-      const response = await fetch(`${API_URL}/api/auth/verify-otp`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email: formData.email.trim().toLowerCase(), otp }),
-      });
-      const data = await response.json();
-      if (!response.ok) throw new Error(data.message || "email not valid");
-      setEmailVerified(true);
-      setOtpMessage(data.message);
-    } catch (error) {
-      setEmailVerified(false);
-      setFormData((prev) => ({ ...prev, email: "" }));
-      setOtp("");
-      showOtpToast("email not valid");
-    }
   };
 
   // ================= IMAGE =================
@@ -240,12 +192,18 @@ function FarmerProfile({
       return;
     }
 
-    setSelectedImageFile(file);
-    setProfileImage(URL.createObjectURL(file));
-    setErrors((prev) => ({
-      ...prev,
-      profileImage: "",
-    }));
+    const reader = new FileReader();
+
+    reader.onloadend = () => {
+      setProfileImage(reader.result);
+
+      setErrors((prev) => ({
+        ...prev,
+        profileImage: "",
+      }));
+    };
+
+    reader.readAsDataURL(file);
   };
 
   // ================= VALIDATION =================
@@ -273,10 +231,6 @@ function FarmerProfile({
       newErrors.email = "Enter a valid email address.";
     }
 
-    if (isCreating && !emailVerified) {
-      newErrors.email = "Please verify your email first.";
-    }
-
     // Password
     if (isCreating) {
       const passwordRegex =
@@ -286,7 +240,7 @@ function FarmerProfile({
         newErrors.password = "Password is required.";
       } else if (!passwordRegex.test(formData.password)) {
         newErrors.password =
-          "Password should be at least 8 characters with uppercase, lowercase and number.";
+          "Password must be 8+ characters with uppercase, lowercase and number.";
       }
     }
 
@@ -341,30 +295,8 @@ function FarmerProfile({
 
   // ================= SAVE PROFILE =================
 
-  const uploadSelectedImage = async () => {
-    setImageUploading(true);
-    const imageData = new FormData();
-    imageData.append("image", selectedImageFile);
-    try {
-      const imageResponse = await fetch(`${API_URL}/api/auth/profile/image`, {
-        method: "POST",
-        credentials: "include",
-        body: imageData,
-      });
-      const imageResult = await imageResponse.json();
-      if (!imageResponse.ok || !imageResult.imageUrl) {
-        throw new Error(imageResult.message || "Could not upload profile image.");
-      }
-      return imageResult.imageUrl;
-    } finally {
-      setImageUploading(false);
-    }
-  };
-
-  const handleSave = async () => {
+  const handleSave = () => {
     setSaved(false);
-
-    if (imageUploading) return;
 
     const isValid = validateForm();
 
@@ -372,84 +304,89 @@ function FarmerProfile({
       return;
     }
 
-    let uploadedImageUrl = profileImage;
-    if (!isCreating && selectedImageFile) {
-      try {
-        uploadedImageUrl = await uploadSelectedImage();
-      } catch (error) {
-        setErrors({ profileImage: error.message });
-        return;
-      }
-    }
+    const existingProfile = JSON.parse(
+      localStorage.getItem("farmerProfile") || "null"
+    );
 
-    const payload = {
-      name: formData.name.trim(),
-      email: formData.email.trim().toLowerCase(),
-      phone: formData.phone.trim(),
-      location: formData.location,
-      farmSize: Number(formData.farmSize),
-      crop: formData.crop,
-      category: formData.category,
-      season: formData.season,
-      profileImage: uploadedImageUrl,
-    };
-
-    if (isCreating) {
-      payload.password = formData.password;
-    }
-
-    try {
-      const response = await fetch(
-        `${API_URL}/api/auth/${isCreating ? "register" : "profile"}`,
-        {
-          method: isCreating ? "POST" : "PUT",
-          headers: { "Content-Type": "application/json" },
-          credentials: "include",
-          body: JSON.stringify(payload),
-        }
-      );
-      const data = await response.json();
-      if (!response.ok) {
-        setErrors({ form: data.message || "Could not save profile." });
-        return;
-      }
-
-      let profileForState = data.user;
-
-      if (isCreating && selectedImageFile) {
-        try {
-          const imageUrl = await uploadSelectedImage();
-          const refreshedProfile = await fetch(`${API_URL}/api/auth/me`, { credentials: "include" });
-          const refreshedData = await refreshedProfile.json();
-          if (refreshedProfile.ok && refreshedData.user.profileImage === imageUrl) profileForState = refreshedData.user;
-        } catch (error) {
-          setErrors({ profileImage: error.message });
-          return;
-        }
-      }
-
-      setProfile(profileForState);
-      setSelectedImageFile(null);
-
-      setFormData({
-        name: profileForState.name,
-        email: profileForState.email,
-        password: "",
-        phone: profileForState.phone,
-        location: profileForState.location,
-        farmSize: profileForState.farmSize,
-        crop: profileForState.crop,
-        category: profileForState.category,
-        season: profileForState.season,
+    // Check duplicate email during new profile creation
+    if (
+      isCreating &&
+      existingProfile &&
+      existingProfile.email?.toLowerCase() ===
+        formData.email.trim().toLowerCase()
+    ) {
+      setErrors({
+        email:
+          "This email is already registered. Please use another email.",
       });
 
-      setIsCreating(false);
-      setIsEditing(false);
-      setSaved(true);
+      return;
+    }
 
-      if (onProfileCreated) onProfileCreated(profileForState);
-    } catch (error) {
-      setErrors({ form: "Backend se connection nahi ho paya." });
+    // ================= IMPORTANT =================
+    // Editing profile should NOT remove old password.
+
+    const updatedProfile = {
+      ...(existingProfile || {}),
+
+      name: formData.name.trim(),
+
+      email: formData.email.trim().toLowerCase(),
+
+      // New profile -> new password
+      // Edit profile -> old password
+      password: isCreating
+        ? formData.password
+        : existingProfile?.password,
+
+      phone: formData.phone.trim(),
+
+      location: formData.location,
+
+      farmSize: formData.farmSize,
+
+      crop: formData.crop,
+
+      category: formData.category,
+
+      season: formData.season,
+
+      profileImage: profileImage,
+    };
+
+    // Save in localStorage
+    localStorage.setItem(
+      "farmerProfile",
+      JSON.stringify(updatedProfile)
+    );
+
+    // Password ko UI state mein hide rakho
+    const profileForState = {
+      ...updatedProfile,
+      password: undefined,
+    };
+
+    setProfile(profileForState);
+
+    setFormData({
+      name: updatedProfile.name,
+      email: updatedProfile.email,
+      password: "",
+      phone: updatedProfile.phone,
+      location: updatedProfile.location,
+      farmSize: updatedProfile.farmSize,
+      crop: updatedProfile.crop,
+      category: updatedProfile.category,
+      season: updatedProfile.season,
+    });
+
+    setIsCreating(false);
+    setIsEditing(false);
+    setSaved(true);
+
+    // App ko inform karo
+    if (onProfileCreated) {
+      onProfileCreated(profileForState);
     }
   };
 
@@ -458,10 +395,6 @@ function FarmerProfile({
   const startCreating = () => {
     setIsCreating(true);
     setIsEditing(false);
-    setEmailVerified(false);
-    setOtp("");
-    setOtpMessage("");
-    setShowPassword(false);
 
     setFormData({
       name: "",
@@ -476,7 +409,6 @@ function FarmerProfile({
     });
 
     setProfileImage("");
-    setSelectedImageFile(null);
     setErrors({});
     setSaved(false);
   };
@@ -499,14 +431,9 @@ function FarmerProfile({
     });
 
     setProfileImage(profile.profileImage || "");
-    setSelectedImageFile(null);
 
     setIsCreating(false);
     setIsEditing(true);
-    setEmailVerified(true);
-    setOtp("");
-    setOtpMessage("");
-    setShowPassword(false);
     setErrors({});
     setSaved(false);
   };
@@ -517,7 +444,6 @@ function FarmerProfile({
     if (profile) {
       setIsCreating(false);
       setIsEditing(false);
-      setOtpMessage("");
       setErrors({});
       setSaved(false);
     } else {
@@ -534,43 +460,36 @@ function FarmerProfile({
       crops[formData.category] || [];
 
     return (
-      <div className="min-h-screen bg-gray-950 text-white px-4 py-8">
-
-        {otpMessage && (
-          <div className="fixed top-5 left-1/2 -translate-x-1/2 z-50 rounded-xl bg-gray-900 border border-green-700 px-5 py-3 text-sm text-green-300 shadow-xl">
-            {otpMessage}
-          </div>
-        )}
+      <div className="fd-page px-4 py-8 md:py-12">
         <div className="max-w-3xl mx-auto">
 
-          {/* Header */}
-
-          <div className="flex items-center justify-between mb-8">
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between mb-8">
             <div>
-              <h1 className="text-3xl font-bold">
+              <h1 className="text-3xl font-extrabold tracking-tight text-farm-900">
                 {isCreating
                   ? "Create Farmer Profile"
                   : "Edit Farmer Profile"}
               </h1>
 
-              <p className="text-gray-400 mt-2">
+              <p className="text-stone-500 mt-2">
                 Enter your farming details carefully.
               </p>
             </div>
 
-            <button
+            <Button
+              type="button"
+              variant="secondary"
+              size="sm"
               onClick={handleCancel}
-              className="px-4 py-2 rounded-lg bg-gray-800 hover:bg-gray-700"
+              className="self-start"
             >
+              <ArrowLeft />
               Back
-            </button>
+            </Button>
           </div>
 
-          {/* Form Card */}
-
-          <div className="bg-gray-900 border border-gray-800 rounded-2xl p-6">
-
-            {/* Profile Image */}
+          <Card>
+            <CardContent className="p-5 sm:p-8">
 
             <div className="flex flex-col items-center mb-8">
 
@@ -578,16 +497,19 @@ function FarmerProfile({
                 <img
                   src={profileImage}
                   alt="Profile"
-                  className="w-28 h-28 rounded-full object-cover border-4 border-gray-700"
+                  className="w-28 h-28 rounded-full object-cover border-4 border-farm-100 shadow-soft"
                 />
               ) : (
-                <div className="w-28 h-28 rounded-full bg-gray-800 flex items-center justify-center text-4xl">
-                  👨‍🌾
+                <div className="w-28 h-28 rounded-full bg-farm-50 border border-farm-100 flex items-center justify-center text-farm-600 shadow-soft">
+                  <UserRound className="h-10 w-10" />
                 </div>
               )}
 
-              <label className="mt-4 cursor-pointer px-4 py-2 rounded-lg bg-green-600 hover:bg-green-700">
-                {imageUploading ? "Uploading Photo..." : "Upload Photo"}
+              <label className="mt-4 cursor-pointer">
+                <span className="inline-flex h-10 items-center gap-2 rounded-xl bg-farm-600 px-4 text-sm font-semibold text-white shadow-soft hover:bg-farm-500">
+                  <Camera className="h-4 w-4" />
+                  Upload Photo
+                </span>
 
                 <input
                   type="file"
@@ -598,7 +520,7 @@ function FarmerProfile({
               </label>
 
               {errors.profileImage && (
-                <p className="text-red-400 text-sm mt-2">
+                <p className="text-red-600 text-sm mt-2 font-medium">
                   {errors.profileImage}
                 </p>
               )}
@@ -625,42 +547,8 @@ function FarmerProfile({
               value={formData.email}
               onChange={handleChange}
               placeholder="example@gmail.com"
-              disabled={!isCreating}
               error={errors.email}
             />
-
-            {isCreating && (
-              <>
-                <button
-                  type="button"
-                  onClick={sendOtp}
-                  disabled={otpLoading || emailVerified}
-                  className="w-full mt-2 py-2.5 rounded-lg bg-green-700 hover:bg-green-600 disabled:opacity-60 font-semibold"
-                >
-                  {emailVerified ? "Email Verified" : otpLoading ? "Sending OTP..." : "Send OTP"}
-                </button>
-
-                <div className="mt-3 flex gap-2">
-                  <input
-                    type="text"
-                    inputMode="numeric"
-                    maxLength="6"
-                    value={otp}
-                    onChange={(e) => setOtp(e.target.value.replace(/\D/g, "").slice(0, 6))}
-                    placeholder="Enter OTP"
-                    className="flex-1 rounded-lg bg-gray-900 border border-gray-700 px-3 py-2.5 text-white outline-none focus:border-green-500"
-                  />
-                  <button
-                    type="button"
-                    onClick={verifyOtp}
-                    disabled={otp.length !== 6 || emailVerified}
-                    className="px-4 rounded-lg bg-gray-700 hover:bg-gray-600 disabled:opacity-50 font-semibold"
-                  >
-                    Verify OTP
-                  </button>
-                </div>
-              </>
-            )}
 
             {/* Password only during create */}
 
@@ -668,13 +556,11 @@ function FarmerProfile({
               <Input
                 label="Password"
                 name="password"
-                type={showPassword ? "text" : "password"}
+                type="password"
                 value={formData.password}
                 onChange={handleChange}
                 placeholder="Create a strong password"
                 error={errors.password}
-                showPassword={showPassword}
-                onTogglePassword={() => setShowPassword((current) => !current)}
               />
             )}
 
@@ -701,8 +587,6 @@ function FarmerProfile({
                 }));
               }}
               placeholder="9876543210"
-              maxLength="10"
-              disabled={!isCreating}
               error={errors.phone}
             />
 
@@ -788,27 +672,31 @@ function FarmerProfile({
 
             {/* Buttons */}
 
-            <div className="flex gap-4 mt-8">
+            <div className="flex flex-col-reverse sm:flex-row gap-3 mt-8">
 
-              <button
+              <Button
+                type="button"
+                variant="secondary"
                 onClick={handleCancel}
-                className="flex-1 py-3 rounded-xl bg-gray-800 hover:bg-gray-700 font-semibold"
+                className="flex-1"
               >
                 Cancel
-              </button>
+              </Button>
 
-              <button
+              <Button
+                type="button"
                 onClick={handleSave}
-                className="flex-1 py-3 rounded-xl bg-green-600 hover:bg-green-700 font-semibold"
+                className="flex-1"
               >
                 {isCreating
                   ? "Create Profile"
                   : "Save Changes"}
-              </button>
+              </Button>
 
             </div>
 
-          </div>
+            </CardContent>
+          </Card>
         </div>
       </div>
     );
@@ -818,40 +706,53 @@ function FarmerProfile({
 
   if (!profile) {
     return (
-      <div className="min-h-screen bg-gray-950 text-white flex items-center justify-center px-4">
+      <div className="fd-page flex items-center justify-center px-4 py-10">
 
-        <div className="max-w-md w-full text-center">
+        <motion.div
+          className="max-w-md w-full"
+          initial={{ opacity: 0, y: 12 }}
+          animate={{ opacity: 1, y: 0 }}
+        >
+        <Card>
+          <CardContent className="p-8 sm:p-10 text-center">
 
-          <div className="text-7xl mb-6">
-            👨‍🌾
+          <div className="mx-auto mb-6 flex h-20 w-20 items-center justify-center rounded-full border border-farm-100 bg-farm-50 text-farm-600 shadow-soft">
+            <UserRound className="h-10 w-10" />
           </div>
 
-          <h1 className="text-3xl font-bold mb-3">
+          <h1 className="text-3xl font-extrabold tracking-tight text-farm-900 mb-3">
             Create Your Farmer Profile
           </h1>
 
-          <p className="text-gray-400 mb-8">
+          <p className="text-stone-500 mb-8 leading-relaxed">
             Add your farming details to get personalized
             crop disease recommendations.
           </p>
 
-          <button
+          <Button
+            type="button"
             onClick={startCreating}
-            className="w-full py-3 rounded-xl bg-green-600 hover:bg-green-700 font-semibold"
+            className="w-full"
+            size="lg"
           >
             Create Profile
-          </button>
+          </Button>
 
           {onBack && (
-            <button
+            <Button
+              type="button"
+              variant="secondary"
               onClick={onBack}
-              className="w-full mt-3 py-3 rounded-xl bg-gray-800 hover:bg-gray-700"
+              className="w-full mt-3"
+              size="lg"
             >
               Back
-            </button>
+            </Button>
           )}
 
-        </div>
+          </CardContent>
+        </Card>
+        </motion.div>
 
       </div>
     );
@@ -860,46 +761,44 @@ function FarmerProfile({
   // ================= PROFILE VIEW =================
 
   return (
-    <div className="min-h-screen bg-gray-950 text-white px-4 py-8">
+    <div className="fd-page px-4 py-8 md:py-12">
 
       <div className="max-w-3xl mx-auto">
 
-        {/* Header */}
-
-        <div className="flex items-center justify-between mb-8">
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between mb-8">
 
           <div>
-            <h1 className="text-3xl font-bold">
+            <h1 className="text-3xl font-extrabold tracking-tight text-farm-900">
               Farmer Profile
             </h1>
 
-            <p className="text-gray-400 mt-2">
+            <p className="text-stone-500 mt-2">
               Your farming information
             </p>
           </div>
 
-          <button
+          <Button
+            type="button"
+            variant="secondary"
+            size="sm"
             onClick={onBack}
-            className="px-4 py-2 rounded-lg bg-gray-800 hover:bg-gray-700"
+            className="self-start"
           >
+            <ArrowLeft />
             Back
-          </button>
+          </Button>
 
         </div>
 
-        {/* Success Message */}
-
         {saved && (
-          <div className="mb-6 p-4 rounded-xl bg-green-900/40 border border-green-700 text-green-300">
-            ✅ Profile saved successfully.
+          <div className="mb-6 p-4 rounded-2xl bg-farm-50 border border-farm-200 text-farm-800 font-medium flex items-center gap-2">
+            <CheckCircle2 className="h-4 w-4" />
+            Profile saved successfully.
           </div>
         )}
 
-        {/* Profile Card */}
-
-        <div className="bg-gray-900 border border-gray-800 rounded-2xl p-6">
-
-          {/* Top */}
+        <Card>
+          <CardContent className="p-5 sm:p-8">
 
           <div className="flex flex-col sm:flex-row items-center gap-6 mb-8">
 
@@ -907,23 +806,30 @@ function FarmerProfile({
               <img
                 src={profile.profileImage}
                 alt="Farmer"
-                className="w-28 h-28 rounded-full object-cover border-4 border-gray-700"
+                className="w-28 h-28 rounded-full object-cover border-4 border-farm-100 shadow-soft"
               />
             ) : (
-              <div className="w-28 h-28 rounded-full bg-gray-800 flex items-center justify-center text-5xl">
-                👨‍🌾
+              <div className="w-28 h-28 rounded-full bg-farm-50 border border-farm-100 flex items-center justify-center text-farm-600 shadow-soft">
+                <UserRound className="h-12 w-12" />
               </div>
             )}
 
             <div className="text-center sm:text-left">
 
-              <h2 className="text-2xl font-bold">
+              <h2 className="text-2xl font-extrabold text-farm-900">
                 {profile.name}
               </h2>
 
-              <p className="text-gray-400">
+              <p className="text-stone-500 mt-1">
                 {profile.email}
               </p>
+
+              {profile.location && (
+                <p className="mt-2 inline-flex items-center gap-1.5 text-sm text-farm-700">
+                  <MapPin className="h-4 w-4" />
+                  {profile.location}
+                </p>
+              )}
 
             </div>
 
@@ -977,14 +883,18 @@ function FarmerProfile({
 
           {/* Edit */}
 
-          <button
+          <Button
+            type="button"
             onClick={startEditing}
-            className="w-full mt-8 py-3 rounded-xl bg-blue-600 hover:bg-blue-700 font-semibold"
+            className="w-full mt-8"
+            size="lg"
           >
-            ✏️ Edit Profile
-          </button>
+            <Pencil />
+            Edit Profile
+          </Button>
 
-        </div>
+          </CardContent>
+        </Card>
 
       </div>
 
@@ -1005,50 +915,33 @@ function Input({
   min,
   max,
   step,
-  disabled = false,
-  showPassword,
-  onTogglePassword,
 }) {
   return (
     <div className="mb-5">
 
-      <label className="block text-sm font-medium text-gray-300 mb-2">
+      <label className="fd-label">
         {label}
       </label>
 
-      <div className="relative">
-        <input
-          type={type}
-          name={name}
-          value={value}
-          onChange={onChange}
-          placeholder={placeholder}
-          min={min}
-          max={max}
-          step={step}
-          disabled={disabled}
-          className={`w-full px-4 ${onTogglePassword ? "pr-12" : "pr-4"} py-3 rounded-xl bg-gray-800 border ${
-            error
-              ? "border-red-500"
-              : "border-gray-700"
-          } text-white outline-none focus:border-green-500 disabled:cursor-not-allowed disabled:opacity-60`}
-        />
-
-        {onTogglePassword && (
-          <button
-            type="button"
-            onClick={onTogglePassword}
-            className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-green-400"
-            aria-label={showPassword ? "Hide password" : "Show password"}
-          >
-            {showPassword ? "🙈" : "👁️"}
-          </button>
-        )}
-      </div>
+      <input
+        type={type}
+        name={name}
+        value={value}
+        onChange={onChange}
+        placeholder={placeholder}
+        min={min}
+        max={max}
+        step={step}
+        className={`fd-input ${
+          error
+            ? "border-red-400 focus:border-red-500 focus:ring-red-500/10"
+            : ""
+        }`}
+      />
 
       {error && (
-        <p className="text-red-400 text-sm mt-1">
-          ⚠️ {error}
+        <p className="text-red-600 text-sm mt-1 font-medium">
+          {error}
         </p>
       )}
 
@@ -1071,7 +964,7 @@ function Select({
   return (
     <div className="mb-5">
 
-      <label className="block text-sm font-medium text-gray-300 mb-2">
+      <label className="fd-label">
         {label}
       </label>
 
@@ -1080,11 +973,11 @@ function Select({
         value={value}
         onChange={onChange}
         disabled={disabled}
-        className={`w-full px-4 py-3 rounded-xl bg-gray-800 border ${
+        className={`fd-input ${
           error
-            ? "border-red-500"
-            : "border-gray-700"
-        } text-white outline-none focus:border-green-500 disabled:opacity-50`}
+            ? "border-red-400 focus:border-red-500 focus:ring-red-500/10"
+            : ""
+        }`}
       >
 
         <option value="">
@@ -1103,8 +996,8 @@ function Select({
       </select>
 
       {error && (
-        <p className="text-red-400 text-sm mt-1">
-          ⚠️ {error}
+        <p className="text-red-600 text-sm mt-1 font-medium">
+          {error}
         </p>
       )}
 
@@ -1116,13 +1009,13 @@ function Select({
 
 function ProfileItem({ label, value }) {
   return (
-    <div className="bg-gray-800/60 rounded-xl p-4">
+    <div className="bg-farm-50/80 border border-farm-100 rounded-xl p-4">
 
-      <p className="text-sm text-gray-400 mb-1">
+      <p className="text-xs font-semibold uppercase tracking-wide text-stone-400 mb-1">
         {label}
       </p>
 
-      <p className="font-medium break-words">
+      <p className="font-semibold text-farm-900 break-words">
         {value || "Not provided"}
       </p>
 
