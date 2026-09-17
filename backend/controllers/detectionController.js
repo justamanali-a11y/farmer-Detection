@@ -32,6 +32,7 @@ exports.predict = async (req, res) => {
       confidence: report.confidence,
       severity: report.severity,
       recommendation: report.recommendation,
+      source: prediction.source || "gemini",
     });
   } catch (error) {
     console.error("Detection failed:", error.message);
